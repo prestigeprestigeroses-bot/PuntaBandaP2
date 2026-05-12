@@ -237,13 +237,14 @@
 
         <div class="hint" style="margin-top:8px;">
           Bonchador pendiente: <span id="lastWorkerForV" class="mono warnTxt">—</span><br>
-          Código V pendiente: <span id="lastVPending" class="mono warnTxt">—</span><br>
-          Lámina pendiente: <span id="lastLPending" class="mono warnTxt">—</span><br><br>
+Código V pendiente: <span id="lastVPending" class="mono warnTxt">—</span><br>
+Grado pendiente: <span id="lastGPending" class="mono warnTxt">—</span><br>
+Lámina pendiente: <span id="lastLPending" class="mono warnTxt">—</span><br><br>
 
           Código 1 (bonchador + tallos): <span class="mono">B01-T20</span><br>
-          Código 2 (variedad + grado): <span class="mono">V01-60</span><br>
-          Código 3 (lámina): <span class="mono">L1</span><br><br>
-
+Código 2 (variedad): <span class="mono">V01</span><br>
+Código 3 (grado): <span class="mono">G60</span><br>
+Código 4 (lámina): <span class="mono">L1</span><br><br>
           • <b>B01-T20</b> = bonchador B01 con 20 tallos<br>
           • <b>V01-60</b> = variedad V01 con grado 60<br>
           • <b>L1</b> = lámina 1<br><br>
@@ -253,7 +254,7 @@
         </div>
 
         <label style="margin-top:10px;">Entrada manual (teclado)</label>
-        <input id="manualScan" class="mono" placeholder="Ej: B16-T20  ó  V01-60  ó  L1  (Enter)" />
+        <input id="manualScan" class="mono" placeholder="Ej: B01-T20  ó  V01  ó  G60  ó  L1  (Enter)" />
 
         <div class="split" style="margin-top:8px; gap:8px;">
           <div class="hint">Último envío: <span id="lastScan" class="mono warnTxt">—</span></div>
@@ -282,6 +283,8 @@
 </div>
 
 <script>
+
+  
 (() => {
   const API = (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")
     ? "http://127.0.0.1:3000"
@@ -319,7 +322,8 @@ const tbVariedad = $("tbVariedad");
 
   const lastWorkerEl = $("lastWorkerForV");
   const lastVEl = $("lastVPending");
-  const lastLEl = $("lastLPending");
+const lastGEl = $("lastGPending");
+const lastLEl = $("lastLPending");
 
   const btnSerial = $("btnSerial");
   const serialState = $("serialState");
@@ -1188,14 +1192,31 @@ function renderAll() {
 }
 
   function parseV(code) {
-    const up = String(code||"").trim().toUpperCase();
-    const m = up.match(/^V(\d{1,2})-(\d{1,3})$/);
-    if (!m) return null;
-    const variedad = "V" + m[1];
-    const grado = parseInt(m[2],10);
-    if (!Number.isFinite(grado) || grado <= 0) return null;
-    return { raw: up, variedad, grado };
-  }
+  const up = String(code || "").trim().toUpperCase();
+  const m = up.match(/^V(\d{1,2})$/);
+  if (!m) return null;
+
+  const n = parseInt(m[1], 10);
+  if (!Number.isFinite(n) || n <= 0) return null;
+
+  return {
+    raw: `V${String(n).padStart(2, "0")}`,
+    variedad: `V${String(n).padStart(2, "0")}`
+  };
+}
+function parseG(code) {
+  const up = String(code || "").trim().toUpperCase();
+  const m = up.match(/^G(\d{1,3})$/);
+  if (!m) return null;
+
+  const grado = parseInt(m[1], 10);
+  if (!Number.isFinite(grado) || grado <= 0) return null;
+
+  return {
+    raw: `G${grado}`,
+    grado
+  };
+}
 
   function parseL(code) {
     const up = String(code||"").trim().toUpperCase();
@@ -1207,12 +1228,24 @@ function renderAll() {
   }
 
   function detectBarcodeType(code) {
-    const up = String(code||"").trim().toUpperCase();
-    const b = parseBonchador(up);
-    const v = parseV(up);
-    const l = parseL(up);
-    return { up, isB: !!b, isV: !!v, isL: !!l, b, v, l };
-  }
+  const up = String(code || "").trim().toUpperCase();
+  const b = parseBonchador(up);
+  const v = parseV(up);
+  const g = parseG(up);
+  const l = parseL(up);
+
+  return {
+    up,
+    isB: !!b,
+    isV: !!v,
+    isG: !!g,
+    isL: !!l,
+    b,
+    v,
+    g,
+    l
+  };
+}
 
   function setLastWorkerUI(txt) {
     if (!lastWorkerEl) return;
@@ -1225,6 +1258,17 @@ function renderAll() {
     if (txt) { lastVEl.textContent = txt; lastVEl.className = "mono okTxt"; }
     else { lastVEl.textContent = "—"; lastVEl.className = "mono warnTxt"; }
   }
+  function setLastGUI(txt) {
+  if (!lastGEl) return;
+
+  if (txt) {
+    lastGEl.textContent = txt;
+    lastGEl.className = "mono okTxt";
+  } else {
+    lastGEl.textContent = "—";
+    lastGEl.className = "mono warnTxt";
+  }
+}
 
   function setLastLUI(txt) {
     if (!lastLEl) return;
@@ -1244,64 +1288,75 @@ function renderAll() {
   }
 
   async function trySendCombo() {
-    if (!(pendingWorker && pendingV && pendingL)) return;
+  if (!(pendingWorker && pendingV && pendingG && pendingL)) return;
 
-    const out = await sendToServer({
-      worker: pendingWorker.raw,
-      barcode: pendingV.raw,
-      lamina: pendingL.raw
-    });
+  const out = await sendToServer({
+    worker: pendingWorker.raw,
+    variedad: pendingV.raw,
+    grado: pendingG.raw,
+    lamina: pendingL.raw
+  });
 
-    if (!out.ok) {
-      const msg = out.data?.error || "ERROR";
-      lastScanEl.textContent = `${pendingWorker.raw} / ${pendingV.raw} / ${pendingL.raw} (${msg})`;
-      return;
-    }
-
-    pendingWorker = null;
-    pendingV = null;
-    pendingL = null;
-    setLastWorkerUI(null);
-    setLastVUI(null);
-    setLastLUI(null);
-
-    if (out.data?.reg) {
-      scans.unshift(out.data.reg);
-      renderAll();
-    } else {
-      await refreshAll();
-    }
+  if (!out.ok) {
+    const msg = out.data?.error || "ERROR";
+    lastScanEl.textContent = `${pendingWorker.raw} / ${pendingV.raw} / ${pendingG.raw} / ${pendingL.raw} (${msg})`;
+    return;
   }
+
+  pendingWorker = null;
+  pendingV = null;
+  pendingG = null;
+  pendingL = null;
+
+  setLastWorkerUI(null);
+  setLastVUI(null);
+  setLastGUI(null);
+  setLastLUI(null);
+
+  if (out.data?.reg) {
+    scans.unshift(out.data.reg);
+    renderAll();
+  } else {
+    await refreshAll();
+  }
+}
 
   async function postScan(rawCode) {
-    const { up, isB, isV, isL, b, v, l } = detectBarcodeType(rawCode);
-    lastScanEl.textContent = up;
+  const { up, isB, isV, isG, isL, b, v, g, l } = detectBarcodeType(rawCode);
+  lastScanEl.textContent = up;
 
-    if (!isB && !isV && !isL) {
-      lastScanEl.textContent = up + " (NO RECONOCIDO)";
-      return;
-    }
-
-    if (isB) {
-      pendingWorker = b;
-      setLastWorkerUI(pendingWorker.raw);
-      await trySendCombo();
-      return;
-    }
-
-    if (isV) {
-      pendingV = v;
-      setLastVUI(pendingV.raw);
-      await trySendCombo();
-      return;
-    }
-
-    if (isL) {
-      pendingL = l;
-      setLastLUI(pendingL.raw);
-      await trySendCombo();
-    }
+  if (!isB && !isV && !isG && !isL) {
+    lastScanEl.textContent = up + " (NO RECONOCIDO)";
+    return;
   }
+
+  if (isB) {
+    pendingWorker = b;
+    setLastWorkerUI(pendingWorker.raw);
+    await trySendCombo();
+    return;
+  }
+
+  if (isV) {
+    pendingV = v;
+    setLastVUI(pendingV.raw);
+    await trySendCombo();
+    return;
+  }
+
+  if (isG) {
+    pendingG = g;
+    setLastGUI(pendingG.raw);
+    await trySendCombo();
+    return;
+  }
+
+  if (isL) {
+    pendingL = l;
+    setLastLUI(pendingL.raw);
+    await trySendCombo();
+  }
+}
 
   manualScan.addEventListener("keydown", async (e) => {
     if (e.key !== "Enter") return;

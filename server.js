@@ -148,17 +148,31 @@ function parseWorker(code) {
 }
 
 // Producto: V01-60
-function parseProduct(code) {
+// Variedad: V01, V02, V12...
+function parseVariedad(code) {
   const up = String(code || "").trim().toUpperCase();
-  const m = up.match(/^V(\d{1,2})-(\d{1,3})$/);
+  const m = up.match(/^V(\d{1,2})$/);
   if (!m) return null;
 
-  const variedad_id = `V${m[1]}`;
-  const grado_cm = parseInt(m[2], 10);
+  const n = parseInt(m[1], 10);
+  if (!Number.isFinite(n) || n <= 0) return null;
+
+  return {
+    variedad_id: `V${String(n).padStart(2, "0")}`,
+    raw: up,
+  };
+}
+
+// Grado: G40, G50, G60...
+function parseGrado(code) {
+  const up = String(code || "").trim().toUpperCase();
+  const m = up.match(/^G(\d{1,3})$/);
+  if (!m) return null;
+
+  const grado_cm = parseInt(m[1], 10);
   if (!Number.isFinite(grado_cm) || grado_cm <= 0) return null;
 
   return {
-    variedad_id,
     grado_cm,
     raw: up,
   };
@@ -218,8 +232,9 @@ async function getLaminaActiva(laminaId) {
    GUARDADO EN DB
    ========================================================== */
 
-async function saveScan(wObj, pObj, lObj) {
+async function saveScan(wObj, vObj, gObj, lObj) {
   const client = await pool.connect();
+
   try {
     const localTimestamp = new Date();
 
@@ -240,17 +255,18 @@ async function saveScan(wObj, pObj, lObj) {
 
     const values = [
       localTimestamp,
-      wObj.code,        // B16
-      wObj.tallos,      // 20
-      pObj.variedad_id, // V01
-      pObj.grado_cm,    // 60
-      wObj.raw,         // B16-T20
-      pObj.raw,         // V01-60
-      lObj.id,          // L1
+      wObj.code,           // B01
+      wObj.tallos,         // 20
+      vObj.variedad_id,    // V01
+      gObj.grado_cm,       // 60
+      wObj.raw,            // B01-T20
+      `${vObj.raw}-${gObj.raw}`, // V01-G60
+      lObj.id              // L1
     ];
 
     const result = await client.query(query, values);
     return result.rows[0];
+
   } finally {
     client.release();
   }
@@ -268,21 +284,28 @@ async function saveScan(wObj, pObj, lObj) {
 
 app.post("/api/scan", async (req, res) => {
   try {
-    const { barcode, worker, lamina } = req.body || {};
+    const { worker, variedad, grado, lamina } = req.body || {};
 
     const wObj = parseWorker(worker);
-    const pObj = parseProduct(barcode);
+    const vObj = parseVariedad(variedad);
+    const gObj = parseGrado(grado);
     const lObj = parseLamina(lamina);
 
     if (!wObj) {
       return res.status(400).json({
-        error: "Bonchador inválido. Formato esperado: B16-T20",
+        error: "Bonchador inválido. Formato esperado: B01-T20",
       });
     }
 
-    if (!pObj) {
+    if (!vObj) {
       return res.status(400).json({
-        error: "Variedad inválida. Formato esperado: V01-60",
+        error: "Variedad inválida. Formato esperado: V01",
+      });
+    }
+
+    if (!gObj) {
+      return res.status(400).json({
+        error: "Grado inválido. Formato esperado: G60",
       });
     }
 
@@ -292,14 +315,16 @@ app.post("/api/scan", async (req, res) => {
       });
     }
 
-    const variedadDb = await getVariedadById(pObj.variedad_id);
+    const variedadDb = await getVariedadById(vObj.variedad_id);
+
     if (!variedadDb) {
       return res.status(400).json({
-        error: `La variedad ${pObj.variedad_id} no existe en la tabla variedades`,
+        error: `La variedad ${vObj.variedad_id} no existe en la tabla variedades`,
       });
     }
 
     const laminaDb = await getLaminaActiva(lObj.id);
+
     if (!laminaDb) {
       return res.status(400).json({
         error: `La lámina ${lObj.id} no existe en la tabla lamina`,
@@ -312,11 +337,11 @@ app.post("/api/scan", async (req, res) => {
       });
     }
 
-    const savedReg = await saveScan(wObj, pObj, lObj);
+    const savedReg = await saveScan(wObj, vObj, gObj, lObj);
 
     const broadcastData = {
       ...savedReg,
-      variedad_nombre: variedadDb.nombre || pObj.variedad_id,
+      variedad_nombre: variedadDb.nombre || vObj.variedad_id,
       worker_name: workerNameMap[savedReg.worker] || savedReg.worker,
       lamina_nombre: laminaDb.nombre || lObj.id,
     };
@@ -327,6 +352,7 @@ app.post("/api/scan", async (req, res) => {
       ok: true,
       reg: broadcastData,
     });
+
   } catch (err) {
     console.error("POST /api/scan error:", err);
     res.status(500).json({ error: "Error interno" });
