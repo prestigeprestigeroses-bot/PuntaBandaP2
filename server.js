@@ -166,7 +166,9 @@ function parseVariedad(code) {
 // Grado: G40, G50, G60...
 function parseGrado(code) {
   const up = String(code || "").trim().toUpperCase();
-  const m = up.match(/^G(\d{1,3})$/);
+
+  // Acepta G60 o 60
+  const m = up.match(/^G?(\d{1,3})$/);
   if (!m) return null;
 
   const grado_cm = parseInt(m[1], 10);
@@ -174,7 +176,7 @@ function parseGrado(code) {
 
   return {
     grado_cm,
-    raw: up,
+    raw: `G${grado_cm}`,
   };
 }
 

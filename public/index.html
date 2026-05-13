@@ -1209,7 +1209,9 @@ function renderAll() {
 }
 function parseG(code) {
   const up = String(code || "").trim().toUpperCase();
-  const m = up.match(/^G(\d{1,3})$/);
+
+  // Acepta G60 o 60
+  const m = up.match(/^G?(\d{1,3})$/);
   if (!m) return null;
 
   const grado = parseInt(m[1], 10);
