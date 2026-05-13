@@ -339,6 +339,7 @@ const lastLEl = $("lastLPending");
   let pendingWorker = null; // { raw, code, tallos }
   let pendingV = null;      // { raw, variedad, grado }
   let pendingL = null;      // { raw, id }
+  let pendingG = null;
 
   const palette = ["#f3ff05","#16A34A","#F97316","#DC2626","#fc9df8","#a8e5f7","#EAB308","#059e8d","#6b8a7f","#18fa0c"];
   const workerColors = {};
@@ -1199,9 +1200,11 @@ function renderAll() {
   const n = parseInt(m[1], 10);
   if (!Number.isFinite(n) || n <= 0) return null;
 
+  const variedadFixed = `V${String(n).padStart(2, "0")}`;
+
   return {
-    raw: `V${String(n).padStart(2, "0")}`,
-    variedad: `V${String(n).padStart(2, "0")}`
+    raw: variedadFixed,
+    variedad: variedadFixed
   };
 }
 function parseG(code) {
