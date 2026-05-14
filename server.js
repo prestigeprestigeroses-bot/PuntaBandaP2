@@ -361,6 +361,52 @@ app.post("/api/scan", async (req, res) => {
   }
 });
 
+app.delete("/api/scans/:id", async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+
+    if (!Number.isInteger(id) || id <= 0) {
+      return res.status(400).json({
+        ok: false,
+        error: "ID inválido"
+      });
+    }
+
+    const result = await pool.query(
+      `
+      DELETE FROM scans
+      WHERE id = $1
+      RETURNING id
+      `,
+      [id]
+    );
+
+    if (!result.rows.length) {
+      return res.status(404).json({
+        ok: false,
+        error: "Registro no encontrado"
+      });
+    }
+
+    broadcast({
+      kind: "delete",
+      id
+    });
+
+    return res.json({
+      ok: true,
+      id
+    });
+
+  } catch (err) {
+    console.error("DELETE /api/scans/:id error:", err);
+    return res.status(500).json({
+      ok: false,
+      error: "Error eliminando registro"
+    });
+  }
+});
+
 /* ==========================================================
    SSE (Server-Sent Events) en /api/stream
    ========================================================== */

@@ -127,6 +127,22 @@
     .legend{display:flex;gap:10px;flex-wrap:wrap;margin-top:10px}
     .legItem{display:flex;gap:8px;align-items:center;border:1px solid rgba(31,51,88,.7);border-radius:999px;padding:6px 10px;background:rgba(10,18,32,.25)}
     .sw{width:10px;height:10px;border-radius:3px}
+
+    .btnDeleteScan {
+  background: linear-gradient(135deg,#7f1d1d,#dc2626);
+  color: #fff;
+  border: 1px solid rgba(239,68,68,.45);
+  border-radius: 10px;
+  padding: 7px 10px;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.btnDeleteScan:hover {
+  opacity: .9;
+}
+  
   </style>
 </head>
 <body>
@@ -201,9 +217,16 @@
 </div>
 
       <div class="split" style="margin-top:12px;">
-        <div class="pill">Últimos registros</div>
-        <div class="hint" id="countInfo">0</div>
-      </div>
+  <div class="pill">Últimos registros</div>
+
+  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+    <select id="workerFilter" style="width:180px;">
+      <option value="">Todos los bonchadores</option>
+    </select>
+
+    <div class="hint" id="countInfo">0</div>
+  </div>
+</div>
 
       <div class="scroll" style="margin-top:8px;">
         <table>
@@ -216,6 +239,7 @@
               <th>Variedad</th>
               <th>Grado</th>
               <th>Lámina</th>
+              <th>Acción</th>
             </tr>
           </thead>
           <tbody id="tb"></tbody>
@@ -319,6 +343,7 @@ const tbVariedad = $("tbVariedad");
   const btnSaveNames = $("btnSaveNames");
   const tb = $("tb");
   const countInfo = $("countInfo");
+  const workerFilter = $("workerFilter");
 
   const lastWorkerEl = $("lastWorkerForV");
   const lastVEl = $("lastVPending");
@@ -950,6 +975,23 @@ ctx.fill();
       namesBox.appendChild(row);
     }
   }
+  function renderWorkerFilter() {
+  if (!workerFilter) return;
+
+  const current = workerFilter.value || "";
+
+  workerFilter.innerHTML = `<option value="">Todos los bonchadores</option>`;
+
+  for (const w of workers) {
+    const option = document.createElement("option");
+    option.value = w;
+    option.textContent = `${w} - ${workerNameMap[w] || w}`;
+
+    if (current === w) option.selected = true;
+
+    workerFilter.appendChild(option);
+  }
+}
   function populateFilterOptions() {
   const laminas = [...new Set(
     scans.map(r => String(r.lamina_id || r.lamina_nombre || "").trim()).filter(Boolean)
@@ -1001,17 +1043,54 @@ ctx.fill();
       await refreshAll();
     }
   }
+  async function deleteScan(id) {
+  if (!id) return;
+
+  const confirmar = confirm(`¿Eliminar el registro ID ${id}?`);
+  if (!confirmar) return;
+
+  try {
+    const res = await fetch(`${API}/api/scans/${encodeURIComponent(id)}`, {
+      method: "DELETE"
+    });
+
+    const data = await res.json().catch(() => ({}));
+
+    if (!res.ok || !data.ok) {
+      lastScanEl.textContent = data.error || "No se pudo eliminar el registro";
+      return;
+    }
+
+    scans = scans.filter(r => String(r.id) !== String(id));
+
+    lastScanEl.textContent = `Registro ${id} eliminado`;
+
+    renderAll();
+
+  } catch (err) {
+    console.error("Error eliminando registro:", err);
+    lastScanEl.textContent = "Error eliminando registro";
+  }
+}
 
   function renderTable() {
   tb.innerHTML = "";
 
+  const selectedWorker = workerFilter?.value || "";
+
   const rows = getFilteredScans()
+    .filter(r => {
+      if (!selectedWorker) return true;
+      return String(r.worker || "").trim().toUpperCase() === selectedWorker;
+    })
     .sort((a,b) => new Date(b.ts) - new Date(a.ts))
     .slice(0, 150);
 
   for (const r of rows) {
-    const name = r.worker_name || workerNameMap[String(r.worker||"").trim()] || "";
+    const name = r.worker_name || workerNameMap[String(r.worker || "").trim()] || "";
+
     const tr = document.createElement("tr");
+
     tr.innerHTML = `
       <td class="mono">${fmtTime(r.ts)}</td>
       <td><span class="pill">${r.worker || ""}</span></td>
@@ -1020,11 +1099,24 @@ ctx.fill();
       <td><span class="pill mono">${r.variedad_nombre ?? r.variedad_id ?? "—"}</span></td>
       <td>${r.grado_cm || ""}</td>
       <td><span class="pill mono">${r.lamina_nombre ?? r.lamina_id ?? "—"}</span></td>
+      <td>
+        <button class="btnDeleteScan" data-id="${r.id}">
+          Eliminar
+        </button>
+      </td>
     `;
+
     tb.appendChild(tr);
   }
 
-  countInfo.textContent = `${getFilteredScans().length} registros filtrados`;
+  tb.querySelectorAll(".btnDeleteScan").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const id = btn.dataset.id;
+      await deleteScan(id);
+    });
+  });
+
+  countInfo.textContent = `${rows.length} registros visibles`;
 }
 
 function renderSummaryByLamina() {
@@ -1149,6 +1241,7 @@ function renderAll() {
       workerNameMap = workerNameMap || {};
       workers.forEach((w,i)=> workerColors[w] = workerColors[w] || palette[i % palette.length]);
       renderNamesEditorOnce();
+      renderWorkerFilter();
       return;
     }
 
@@ -1411,6 +1504,7 @@ function parseG(code) {
   windowSel.addEventListener("change", renderAll);
   activeSel.addEventListener("change", renderAll);
   btnSaveNames.addEventListener("click", saveNames);
+  workerFilter?.addEventListener("change", renderAll);
 
   let pollTimer = null;
 
@@ -1466,6 +1560,11 @@ function parseG(code) {
   scans.unshift(msg.reg);
   if (scans.length > 500) scans = scans.slice(0, 500);
   renderFast();
+  return;
+}
+if (msg.kind === "delete" && msg.id) {
+  scans = scans.filter(r => String(r.id) !== String(msg.id));
+  renderAll();
   return;
 }
       } catch {}
