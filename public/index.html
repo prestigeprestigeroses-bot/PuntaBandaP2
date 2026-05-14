@@ -1281,6 +1281,20 @@ function parseG(code) {
     else { lastLEl.textContent = "—"; lastLEl.className = "mono warnTxt"; }
   }
 
+  function limpiarEscaneoPendiente(mensaje = "Escaneo cancelado") {
+  pendingWorker = null;
+  pendingV = null;
+  pendingG = null;
+  pendingL = null;
+
+  setLastWorkerUI(null);
+  setLastVUI(null);
+  setLastGUI(null);
+  setLastLUI(null);
+
+  lastScanEl.textContent = mensaje;
+}
+
   async function sendToServer(payload) {
     const res = await fetch(API + "/api/scan", {
       method:"POST",
@@ -1327,7 +1341,15 @@ function parseG(code) {
 }
 
   async function postScan(rawCode) {
-  const { up, isB, isV, isG, isL, b, v, g, l } = detectBarcodeType(rawCode);
+  const up = String(rawCode || "").trim().toUpperCase();
+
+  // Código especial para cancelar el registro en construcción
+  if (up === "E123") {
+    limpiarEscaneoPendiente("E123 → REGISTRO EN CONSTRUCCIÓN BORRADO");
+    return;
+  }
+
+  const { isB, isV, isG, isL, b, v, g, l } = detectBarcodeType(up);
   lastScanEl.textContent = up;
 
   if (!isB && !isV && !isG && !isL) {
