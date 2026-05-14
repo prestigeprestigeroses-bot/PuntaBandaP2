@@ -1234,23 +1234,37 @@ function renderAll() {
 }
 
   async function loadWorkers() {
-    const res = await fetch(API + "/api/workers", {cache:"no-store"}).catch(()=>null);
-    if (!res || !res.ok) {
-      workerNameMap = workerNameMap || {};
-      workers.forEach((w,i)=> workerColors[w] = workerColors[w] || palette[i % palette.length]);
-      renderNamesEditorOnce();
-      renderWorkerFilter();
-      return;
-    }
+  const res = await fetch(API + "/api/workers", {cache:"no-store"}).catch(()=>null);
 
-    const arr = await res.json();
-    workers = arr.map(x => String(x.code).trim().toUpperCase());
-    workerNameMap = {};
-    for (const it of arr) workerNameMap[String(it.code).trim().toUpperCase()] = it.name;
+  if (!res || !res.ok) {
+    workerNameMap = workerNameMap || {};
 
-    workers.forEach((w,i)=> workerColors[w] = workerColors[w] || palette[i % palette.length]);
+    workers.forEach((w,i)=> {
+      workerColors[w] = workerColors[w] || palette[i % palette.length];
+    });
+
     renderNamesEditorOnce();
+    renderWorkerFilter();
+
+    return;
   }
+
+  const arr = await res.json();
+
+  workers = arr.map(x => String(x.code).trim().toUpperCase());
+
+  workerNameMap = {};
+  for (const it of arr) {
+    workerNameMap[String(it.code).trim().toUpperCase()] = it.name;
+  }
+
+  workers.forEach((w,i)=> {
+    workerColors[w] = workerColors[w] || palette[i % palette.length];
+  });
+
+  renderNamesEditorOnce();
+  renderWorkerFilter();
+}
 
   async function refreshAll() {
     const [pRes, sRes] = await Promise.all([
@@ -1586,6 +1600,7 @@ if (msg.kind === "delete" && msg.id) {
   drawWorkerChart(graphWorkers, counts, stems, true);
   renderWorkerCards(displayWorkers, counts, stems);
   renderSummaryByLamina();
+  renderSummaryByVariedad();
   renderTable();
 }
 
