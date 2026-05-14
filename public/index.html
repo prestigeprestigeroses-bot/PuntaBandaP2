@@ -220,7 +220,7 @@
   <div class="pill">Últimos registros</div>
 
   <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-    <select id="workerFilter" style="width:180px;">
+    <select id="workerFilter" style="width:220px;">
       <option value="">Todos los bonchadores</option>
     </select>
 
@@ -1076,12 +1076,12 @@ ctx.fill();
   function renderTable() {
   tb.innerHTML = "";
 
-  const selectedWorker = workerFilter?.value || "";
+  const workerSelected = (workerFilter?.value || "").trim().toUpperCase();
 
   const rows = getFilteredScans()
     .filter(r => {
-      if (!selectedWorker) return true;
-      return String(r.worker || "").trim().toUpperCase() === selectedWorker;
+      if (!workerSelected) return true;
+      return String(r.worker || "").trim().toUpperCase() === workerSelected;
     })
     .sort((a,b) => new Date(b.ts) - new Date(a.ts))
     .slice(0, 150);
@@ -1090,7 +1090,6 @@ ctx.fill();
     const name = r.worker_name || workerNameMap[String(r.worker || "").trim()] || "";
 
     const tr = document.createElement("tr");
-
     tr.innerHTML = `
       <td class="mono">${fmtTime(r.ts)}</td>
       <td><span class="pill">${r.worker || ""}</span></td>
@@ -1105,7 +1104,6 @@ ctx.fill();
         </button>
       </td>
     `;
-
     tb.appendChild(tr);
   }
 
