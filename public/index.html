@@ -156,8 +156,28 @@
     </div>
   </div>
 
-  <input id="scanInput" autocomplete="off" autocapitalize="off" spellcheck="false"
-         style="opacity:0; position:absolute; left:-1000px; top:-1000px;" />
+  <input
+  id="scanInput"
+  autocomplete="off"
+  autocapitalize="off"
+  spellcheck="false"
+  autofocus
+  tabindex="0"
+  inputmode="none"
+  style="
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 20px;
+    height: 20px;
+    opacity: 0.01;
+    border: none;
+    outline: none;
+    background: transparent;
+    color: transparent;
+    z-index: 999999;
+  "
+/>
 
   <div class="grid">
     <div class="card right card-rendimiento">
@@ -1489,7 +1509,57 @@ function parseG(code) {
     await trySendCombo();
   }
 }
+let globalScanBuffer = "";
+let globalScanTimer = null;
 
+function isUserEditing() {
+  const el = document.activeElement;
+  if (!el) return false;
+
+  const tag = el.tagName?.toLowerCase();
+
+  if (tag === "select" || tag === "textarea") return true;
+
+  if (tag === "input" && el !== scanInput) return true;
+
+  return false;
+}
+
+document.addEventListener("keydown", async (e) => {
+  if (e.ctrlKey || e.altKey || e.metaKey) return;
+  if (isUserEditing()) return;
+
+  // Si el input oculto ya tiene el foco, no duplicar el escaneo
+  if (document.activeElement === scanInput) return;
+
+  if (e.key === "Enter" || e.key === "Tab") {
+    const code = globalScanBuffer.trim();
+    globalScanBuffer = "";
+
+    if (globalScanTimer) {
+      clearTimeout(globalScanTimer);
+      globalScanTimer = null;
+    }
+
+    if (code) {
+      e.preventDefault();
+      await postScan(code);
+    }
+
+    return;
+  }
+
+  if (e.key.length === 1) {
+    e.preventDefault();
+    globalScanBuffer += e.key;
+
+    if (globalScanTimer) clearTimeout(globalScanTimer);
+
+    globalScanTimer = setTimeout(() => {
+      globalScanBuffer = "";
+    }, 700);
+  }
+}, true);
   manualScan.addEventListener("keydown", async (e) => {
     if (e.key !== "Enter") return;
     const code = (manualScan.value || "").trim();
@@ -1805,13 +1875,32 @@ if (msg.kind === "delete" && msg.id) {
 
   btnSerial?.addEventListener("click", connectSerial);
 
-  (async () => {
-    window.addEventListener("load", () => {
-      focusScanInput();
-      requestWakeLock();
-    });
+  function activarEscaneoInicial() {
+  suspendAutoFocus = false;
+  captureEnabled = true;
+  setCaptureUI();
 
-    try {
+  setTimeout(() => {
+    focusScanInput();
+  }, 100);
+
+  setTimeout(() => {
+    focusScanInput();
+  }, 400);
+
+  setTimeout(() => {
+    focusScanInput();
+  }, 1000);
+}
+
+document.addEventListener("DOMContentLoaded", activarEscaneoInicial);
+window.addEventListener("load", activarEscaneoInicial);
+window.addEventListener("pageshow", activarEscaneoInicial);
+
+(async () => {
+  activarEscaneoInicial();
+
+  try {
       await loadWorkers();
       pillApi.textContent = "API: OK";
       setStatus(true, "Conectado", "API");
