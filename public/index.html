@@ -119,6 +119,39 @@
   color: #22c55e;
 }
 
+.scan-step {
+  display: inline-block;
+  padding: 5px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  border: 1px solid rgba(155,176,208,.35);
+  background: rgba(10,18,32,.45);
+  color: #9bb0d0;
+}
+
+.scan-step.done {
+  border-color: rgba(34,197,94,.7);
+  background: rgba(34,197,94,.18);
+  color: #86efac;
+}
+
+.scan-step.pending {
+  border-color: rgba(245,158,11,.65);
+  background: rgba(245,158,11,.14);
+  color: #fbbf24;
+}
+
+.scan-missing-text {
+  font-size: 12px;
+  font-weight: 800;
+  color: #fbbf24;
+}
+
+.scan-missing-text.ready {
+  color: #86efac;
+}
+
     .scroll{max-height:360px;overflow:auto;border:1px solid var(--line);border-radius:12px;margin-top:10px}
     table{width:100%;border-collapse:collapse;font-size:12px}
     thead th{position:sticky;top:0;background:rgba(15,27,47,.95);color:var(--muted);text-align:left;padding:10px 8px;border-bottom:1px solid var(--line)}
@@ -1504,7 +1537,9 @@ function parseG(code) {
     s.el.classList.toggle("done", s.done);
     s.el.classList.toggle("pending", !s.done);
 
-    s.el.textContent = s.done ? `${s.label} ✓` : s.label;
+    s.el.innerHTML = s.done
+      ? `<span>${s.label}</span><b>OK</b>`
+      : `<span>${s.label}</span><b>Falta</b>`;
 
     if (!s.done) faltantes.push(s.label);
   }
@@ -2108,7 +2143,7 @@ window.addEventListener("pageshow", activarEscaneoInicial);
     renderAll();
     installResizeObservers();
     updateScanProgressUI();
-    
+
     setInterval(async () => {
   if (!navigator.onLine) return;
 
