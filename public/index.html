@@ -455,6 +455,32 @@ const lastLEl = $("lastLPending");
   return counts;
 }
 
+  function getOfflineQueue() {
+  try {
+    return JSON.parse(localStorage.getItem("offlineScans") || "[]");
+  } catch {
+    return [];
+  }
+}
+
+function saveOfflineScan(payload) {
+  const queue = getOfflineQueue();
+
+  queue.push({
+    idLocal: crypto.randomUUID(),
+    fechaLocal: new Date().toISOString(),
+    payload,
+    sincronizado: false
+  });
+
+  localStorage.setItem("offlineScans", JSON.stringify(queue));
+}
+
+function removeOfflineScan(idLocal) {
+  const queue = getOfflineQueue().filter(x => x.idLocal !== idLocal);
+  localStorage.setItem("offlineScans", JSON.stringify(queue));
+}
+
   function stemsByWorkerFiltered() {
   const stems = Object.fromEntries(workers.map(w => [w, 0]));
   for (const r of getFilteredScans()) {
@@ -1421,25 +1447,45 @@ function parseG(code) {
 }
 
   async function sendToServer(payload) {
+  try {
     const res = await fetch(API + "/api/scan", {
-      method:"POST",
-      headers:{ "Content-Type":"application/json" },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload)
     });
+
     let data = null;
-    try { data = await res.json(); } catch {}
-    return { ok: res.ok, data };
+    try { 
+      data = await res.json(); 
+    } catch {}
+
+    return { ok: res.ok, data, offline: false };
+
+  } catch (err) {
+    saveOfflineScan(payload);
+
+    return {
+      ok: true,
+      offline: true,
+      data: {
+        ok: true,
+        mensaje: "Guardado offline pendiente de sincronizar"
+      }
+    };
   }
+}
 
   async function trySendCombo() {
   if (!(pendingWorker && pendingV && pendingG && pendingL)) return;
 
-  const out = await sendToServer({
+  const payload = {
     worker: pendingWorker.raw,
     variedad: pendingV.raw,
     grado: pendingG.raw,
     lamina: pendingL.raw
-  });
+  };
+
+  const out = await sendToServer(payload);
 
   if (!out.ok) {
     const msg = out.data?.error || "ERROR";
@@ -1447,6 +1493,7 @@ function parseG(code) {
     return;
   }
 
+  // Limpia los 4 escaneos pendientes, tanto si guardó online como offline
   pendingWorker = null;
   pendingV = null;
   pendingG = null;
@@ -1457,12 +1504,53 @@ function parseG(code) {
   setLastGUI(null);
   setLastLUI(null);
 
+  // Caso sin internet: quedó guardado localmente
+  if (out.offline) {
+    lastScanEl.textContent = "SIN INTERNET → Registro guardado offline pendiente por sincronizar";
+
+    if (typeof playOkSound === "function") {
+      playOkSound();
+    }
+
+    return;
+  }
+
+  // Caso normal: guardado en servidor
   if (out.data?.reg) {
     scans.unshift(out.data.reg);
     renderAll();
+
+    if (typeof playOkSound === "function") {
+      playOkSound();
+    }
   } else {
     await refreshAll();
   }
+}
+
+async function syncOfflineScans() {
+  const queue = getOfflineQueue();
+  if (!queue.length) return;
+
+  for (const item of queue) {
+    try {
+      const res = await fetch(API + "/api/scan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(item.payload)
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (res.ok && data.ok) {
+        removeOfflineScan(item.idLocal);
+      }
+    } catch {
+      return;
+    }
+  }
+
+  await refreshAll();
 }
 
   async function postScan(rawCode) {
@@ -1923,6 +2011,21 @@ window.addEventListener("pageshow", activarEscaneoInicial);
     installResizeObservers();
   })();
 })();
+
+// ... todo tu código anterior ...
+
+  window.addEventListener("online", async () => {
+    lastScanEl.textContent = "Internet recuperado. Sincronizando registros pendientes...";
+    await syncOfflineScans();
+    lastScanEl.textContent = "Sincronización offline finalizada.";
+  });
+
+  setInterval(() => {
+    if (navigator.onLine) {
+      syncOfflineScans();
+    }
+  }, 10000);
+</script>
 </script>
 </body>
 </html>
