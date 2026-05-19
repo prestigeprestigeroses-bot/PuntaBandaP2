@@ -127,6 +127,46 @@
     .legend{display:flex;gap:10px;flex-wrap:wrap;margin-top:10px}
     .legItem{display:flex;gap:8px;align-items:center;border:1px solid rgba(31,51,88,.7);border-radius:999px;padding:6px 10px;background:rgba(10,18,32,.25)}
     .sw{width:10px;height:10px;border-radius:3px}
+
+    .scan-progress-box {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.scan-step {
+  display: inline-block;
+  padding: 5px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  border: 1px solid rgba(155,176,208,.35);
+  background: rgba(10,18,32,.45);
+  color: #9bb0d0;
+}
+
+.scan-step.done {
+  border-color: rgba(34,197,94,.7);
+  background: rgba(34,197,94,.18);
+  color: #86efac;
+}
+
+.scan-step.pending {
+  border-color: rgba(245,158,11,.65);
+  background: rgba(245,158,11,.14);
+  color: #fbbf24;
+}
+
+.scan-missing-text {
+  font-size: 12px;
+  font-weight: 800;
+  color: #fbbf24;
+}
+
+.scan-missing-text.ready {
+  color: #86efac;
+}
   </style>
 </head>
 <body>
@@ -146,7 +186,20 @@
   <div class="grid">
     <div class="card right card-rendimiento">
     <div class="split">
+  <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
   <div class="pill">Rendimiento por bonchador</div>
+
+  <div id="scanProgressBox" class="scan-progress-box">
+    <span id="stepWorker" class="scan-step pending">Bonchador</span>
+    <span id="stepVariedad" class="scan-step pending">Variedad</span>
+    <span id="stepGrado" class="scan-step pending">Grado</span>
+    <span id="stepLamina" class="scan-step pending">Lámina</span>
+  </div>
+
+  <div id="scanMissingText" class="scan-missing-text">
+    Faltan 4 escaneos
+  </div>
+</div>
   <div class="row2" style="width:420px;max-width:40%;">
     <select id="windowSel">
       <option value="hour">Última hora</option>

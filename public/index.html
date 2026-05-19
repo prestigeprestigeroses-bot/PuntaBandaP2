@@ -183,7 +183,20 @@
     <div class="card right card-rendimiento">
     <div class="split">
   <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
-    <div class="pill">Rendimiento por bonchador</div>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+  <div class="pill">Rendimiento por bonchador</div>
+
+  <div id="scanProgressBox" class="scan-progress-box">
+    <span id="stepWorker" class="scan-step pending">Bonchador</span>
+    <span id="stepVariedad" class="scan-step pending">Variedad</span>
+    <span id="stepGrado" class="scan-step pending">Grado</span>
+    <span id="stepLamina" class="scan-step pending">Lámina</span>
+  </div>
+
+  <div id="scanMissingText" class="scan-missing-text">
+    Faltan 4 escaneos
+  </div>
+</div>
     <div id="offlineStatus" class="pill mono" style="display:none;"></div>
   </div>
 
@@ -369,6 +382,12 @@ const tbVariedad = $("tbVariedad");
   const tb = $("tb");
   const countInfo = $("countInfo");
   const workerFilter = $("workerFilter");
+  const scanProgressBox = $("scanProgressBox");
+const stepWorker = $("stepWorker");
+const stepVariedad = $("stepVariedad");
+const stepGrado = $("stepGrado");
+const stepLamina = $("stepLamina");
+const scanMissingText = $("scanMissingText");
 
   const lastWorkerEl = $("lastWorkerForV");
   const lastVEl = $("lastVPending");
@@ -1469,6 +1488,38 @@ function parseG(code) {
     else { lastLEl.textContent = "—"; lastLEl.className = "mono warnTxt"; }
   }
 
+  function updateScanProgressUI() {
+  const steps = [
+    { el: stepWorker, label: "Bonchador", done: !!pendingWorker },
+    { el: stepVariedad, label: "Variedad", done: !!pendingV },
+    { el: stepGrado, label: "Grado", done: !!pendingG },
+    { el: stepLamina, label: "Lámina", done: !!pendingL }
+  ];
+
+  const faltantes = [];
+
+  for (const s of steps) {
+    if (!s.el) continue;
+
+    s.el.classList.toggle("done", s.done);
+    s.el.classList.toggle("pending", !s.done);
+
+    s.el.textContent = s.done ? `${s.label} ✓` : s.label;
+
+    if (!s.done) faltantes.push(s.label);
+  }
+
+  if (!scanMissingText) return;
+
+  if (faltantes.length === 0) {
+    scanMissingText.textContent = "Registro completo. Enviando...";
+    scanMissingText.classList.add("ready");
+  } else {
+    scanMissingText.textContent = `Falta: ${faltantes.join(", ")}`;
+    scanMissingText.classList.remove("ready");
+  }
+}
+
   function limpiarEscaneoPendiente(mensaje = "Escaneo cancelado") {
   pendingWorker = null;
   pendingV = null;
@@ -1481,6 +1532,7 @@ function parseG(code) {
   setLastLUI(null);
 
   lastScanEl.textContent = mensaje;
+  updateScanProgressUI();
 }
 
   async function sendToServer(payload) {
@@ -1540,6 +1592,8 @@ function parseG(code) {
   setLastVUI(null);
   setLastGUI(null);
   setLastLUI(null);
+
+  updateScanProgressUI();
 
   // Caso sin internet: quedó guardado localmente
   if (out.offline) {
@@ -1611,31 +1665,35 @@ async function syncOfflineScans() {
   }
 
   if (isB) {
-    pendingWorker = b;
-    setLastWorkerUI(pendingWorker.raw);
-    await trySendCombo();
-    return;
-  }
+  pendingWorker = b;
+  setLastWorkerUI(pendingWorker.raw);
+  updateScanProgressUI();
+  await trySendCombo();
+  return;
+}
 
-  if (isV) {
-    pendingV = v;
-    setLastVUI(pendingV.raw);
-    await trySendCombo();
-    return;
-  }
+if (isV) {
+  pendingV = v;
+  setLastVUI(pendingV.raw);
+  updateScanProgressUI();
+  await trySendCombo();
+  return;
+}
 
-  if (isG) {
-    pendingG = g;
-    setLastGUI(pendingG.raw);
-    await trySendCombo();
-    return;
-  }
+if (isG) {
+  pendingG = g;
+  setLastGUI(pendingG.raw);
+  updateScanProgressUI();
+  await trySendCombo();
+  return;
+}
 
-  if (isL) {
-    pendingL = l;
-    setLastLUI(pendingL.raw);
-    await trySendCombo();
-  }
+if (isL) {
+  pendingL = l;
+  setLastLUI(pendingL.raw);
+  updateScanProgressUI();
+  await trySendCombo();
+}
 }
 let globalScanBuffer = "";
 let globalScanTimer = null;
@@ -2049,7 +2107,8 @@ window.addEventListener("pageshow", activarEscaneoInicial);
     setupHiDPICanvas();
     renderAll();
     installResizeObservers();
-
+    updateScanProgressUI();
+    
     setInterval(async () => {
   if (!navigator.onLine) return;
 
