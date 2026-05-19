@@ -182,7 +182,11 @@
   <div class="grid">
     <div class="card right card-rendimiento">
     <div class="split">
-  <div class="pill">Rendimiento por bonchador</div>
+  <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+    <div class="pill">Rendimiento por bonchador</div>
+    <div id="offlineStatus" class="pill mono" style="display:none;"></div>
+  </div>
+
   <div class="row2" style="width:420px;max-width:40%;">
     <select id="windowSel">
       <option value="hour">Última hora</option>
@@ -344,6 +348,7 @@ Código 4 (lámina): <span class="mono">L1</span><br><br>
   const lastScanEl = $("lastScan");
   const pendingBox = $("pendingBox");
   const btnRefresh = $("btnRefresh");
+  const offlineStatus = $("offlineStatus");
   const laminaCards = $("laminaCards");
 
 const tbLamina = $("tbLamina");
@@ -395,6 +400,38 @@ const lastLEl = $("lastLPending");
     st.textContent = text;
     mode.textContent = m ? "· " + m : "";
   };
+
+  function showOfflineStatus(text, type = "warn") {
+  if (!offlineStatus) return;
+
+  offlineStatus.style.display = "inline-block";
+  offlineStatus.textContent = text;
+
+  offlineStatus.className = "pill mono";
+
+  if (type === "ok") {
+    offlineStatus.style.borderColor = "rgba(34,197,94,.65)";
+    offlineStatus.style.color = "#bbf7d0";
+    offlineStatus.style.background = "rgba(34,197,94,.14)";
+  } else if (type === "bad") {
+    offlineStatus.style.borderColor = "rgba(239,68,68,.65)";
+    offlineStatus.style.color = "#fecaca";
+    offlineStatus.style.background = "rgba(239,68,68,.14)";
+  } else {
+    offlineStatus.style.borderColor = "rgba(245,158,11,.65)";
+    offlineStatus.style.color = "#fde68a";
+    offlineStatus.style.background = "rgba(245,158,11,.14)";
+  }
+}
+
+function hideOfflineStatusAfter(ms = 5000) {
+  if (!offlineStatus) return;
+
+  setTimeout(() => {
+    offlineStatus.style.display = "none";
+    offlineStatus.textContent = "";
+  }, ms);
+}
 
   function setCaptureUI() {
     capState.textContent = captureEnabled ? "CAPTURA: ACTIVA" : "CAPTURA: INACTIVA";
@@ -1506,14 +1543,17 @@ function parseG(code) {
 
   // Caso sin internet: quedó guardado localmente
   if (out.offline) {
-    lastScanEl.textContent = "SIN INTERNET → Registro guardado offline pendiente por sincronizar";
+  lastScanEl.textContent = "SIN INTERNET → Registro guardado offline pendiente por sincronizar";
 
-    if (typeof playOkSound === "function") {
-      playOkSound();
-    }
+  const pendientes = getOfflineQueue().length;
+  showOfflineStatus(`SIN INTERNET · ${pendientes} registro(s) offline pendiente(s)`, "warn");
 
-    return;
+  if (typeof playOkSound === "function") {
+    playOkSound();
   }
+
+  return;
+}
 
   // Caso normal: guardado en servidor
   if (out.data?.reg) {
@@ -2009,17 +2049,40 @@ window.addEventListener("pageshow", activarEscaneoInicial);
     setupHiDPICanvas();
     renderAll();
     installResizeObservers();
-window.addEventListener("online", async () => {
-    lastScanEl.textContent = "Internet recuperado. Sincronizando registros pendientes...";
-    await syncOfflineScans();
-    lastScanEl.textContent = "Sincronización offline finalizada.";
-  });
 
-  setInterval(() => {
-    if (navigator.onLine) {
-      syncOfflineScans();
-    }
-  }, 10000);
+    setInterval(async () => {
+  if (!navigator.onLine) return;
+
+  const pendientes = getOfflineQueue().length;
+  if (pendientes <= 0) return;
+
+  showOfflineStatus(`Sincronizando ${pendientes} registro(s) offline...`, "ok");
+
+  await syncOfflineScans();
+
+  const restantes = getOfflineQueue().length;
+
+  if (restantes > 0) {
+    showOfflineStatus(`${restantes} registro(s) offline siguen pendientes`, "warn");
+  } else {
+    showOfflineStatus("Pendientes offline sincronizados", "ok");
+    hideOfflineStatusAfter(5000);
+  }
+}, 10000);
+window.addEventListener("online", async () => {
+  showOfflineStatus("Internet recuperado · sincronizando pendientes...", "ok");
+
+  await syncOfflineScans();
+
+  const pendientes = getOfflineQueue().length;
+
+  if (pendientes > 0) {
+    showOfflineStatus(`${pendientes} registro(s) offline siguen pendientes`, "warn");
+  } else {
+    showOfflineStatus("Sincronización offline finalizada", "ok");
+    hideOfflineStatusAfter(5000);
+  }
+});
 
   })();
 })();
