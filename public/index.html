@@ -2009,12 +2009,7 @@ window.addEventListener("pageshow", activarEscaneoInicial);
     setupHiDPICanvas();
     renderAll();
     installResizeObservers();
-  })();
-})();
-
-// ... todo tu código anterior ...
-
-  window.addEventListener("online", async () => {
+window.addEventListener("online", async () => {
     lastScanEl.textContent = "Internet recuperado. Sincronizando registros pendientes...";
     await syncOfflineScans();
     lastScanEl.textContent = "Sincronización offline finalizada.";
@@ -2025,7 +2020,9 @@ window.addEventListener("pageshow", activarEscaneoInicial);
       syncOfflineScans();
     }
   }, 10000);
-</script>
+
+  })();
+})();
 </script>
 </body>
 </html>
