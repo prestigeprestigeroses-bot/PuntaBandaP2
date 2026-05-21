@@ -1596,6 +1596,19 @@ function parseG(code) {
     };
   }
 }
+function addScanIfNotExists(reg) {
+  if (!reg || reg.id == null) return;
+
+  const exists = scans.some(r => String(r.id) === String(reg.id));
+
+  if (!exists) {
+    scans.unshift(reg);
+  }
+
+  if (scans.length > 500) {
+    scans = scans.slice(0, 500);
+  }
+}
 
   async function trySendCombo() {
   if (!(pendingWorker && pendingV && pendingG && pendingL)) return;
@@ -1644,15 +1657,15 @@ function parseG(code) {
 
   // Caso normal: guardado en servidor
   if (out.data?.reg) {
-    scans.unshift(out.data.reg);
-    renderAll();
+  addScanIfNotExists(out.data.reg);
+  renderAll();
 
-    if (typeof playOkSound === "function") {
-      playOkSound();
-    }
-  } else {
-    await refreshAll();
+  if (typeof playOkSound === "function") {
+    playOkSound();
   }
+} else {
+  await refreshAll();
+}
 }
 
 async function syncOfflineScans() {
@@ -1858,8 +1871,7 @@ document.addEventListener("keydown", async (e) => {
         }
 
         if (msg.kind === "scan" && msg.reg) {
-  scans.unshift(msg.reg);
-  if (scans.length > 500) scans = scans.slice(0, 500);
+  addScanIfNotExists(msg.reg);
   renderFast();
   return;
 }
