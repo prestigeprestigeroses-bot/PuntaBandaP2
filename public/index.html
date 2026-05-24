@@ -119,6 +119,73 @@
   color: #22c55e;
 }
 
+/* =========================
+   COLORES POR TIPO DE LÁMINA
+   ========================= */
+
+.lamina-verde {
+  background: linear-gradient(180deg, #064e3b, #052e26) !important;
+  border: 2px solid #22c55e !important;
+  box-shadow: 0 0 18px rgba(34,197,94,.35);
+}
+
+.lamina-blanca {
+  background: linear-gradient(180deg, #f8fafc, #dbeafe) !important;
+  border: 2px solid #e5e7eb !important;
+  color: #0f172a !important;
+  box-shadow: 0 0 18px rgba(255,255,255,.35);
+}
+
+.lamina-blanca .name,
+.lamina-blanca .bigNum,
+.lamina-blanca .bigLab,
+.lamina-blanca .hint,
+.lamina-blanca .subPill,
+.lamina-blanca .pill {
+  color: #0f172a !important;
+}
+
+.lamina-blanca .subPill,
+.lamina-blanca .pill {
+  background: rgba(15,23,42,.08) !important;
+  border: 1px solid rgba(15,23,42,.25) !important;
+}
+
+.lamina-azul {
+  background: linear-gradient(180deg, #1e3a8a, #172554) !important;
+  border: 2px solid #3b82f6 !important;
+  box-shadow: 0 0 18px rgba(59,130,246,.35);
+}
+
+.lamina-amarilla {
+  background: linear-gradient(180deg, #854d0e, #422006) !important;
+  border: 2px solid #facc15 !important;
+  box-shadow: 0 0 18px rgba(250,204,21,.35);
+}
+
+.lamina-roja {
+  background: linear-gradient(180deg, #7f1d1d, #450a0a) !important;
+  border: 2px solid #ef4444 !important;
+  box-shadow: 0 0 18px rgba(239,68,68,.35);
+}
+
+.lamina-rosada {
+  background: linear-gradient(180deg, #831843, #500724) !important;
+  border: 2px solid #ec4899 !important;
+  box-shadow: 0 0 18px rgba(236,72,153,.35);
+}
+
+.lamina-naranja {
+  background: linear-gradient(180deg, #9a3412, #431407) !important;
+  border: 2px solid #f97316 !important;
+  box-shadow: 0 0 18px rgba(249,115,22,.35);
+}
+
+.lamina-default {
+  background: linear-gradient(180deg, #0D3B66, #082f49) !important;
+  border: 2px solid #22c55e !important;
+}
+
 .workerNameHeader {
   display: flex;
   align-items: center;
@@ -1269,7 +1336,23 @@ ctx.fill();
 
   countInfo.textContent = `${rows.length} registros visibles`;
 }
+function getLaminaColorClass(nombreLamina) {
+  const txt = String(nombreLamina || "")
+    .trim()
+    .toUpperCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
 
+  if (txt.includes("VERDE")) return "lamina-verde";
+  if (txt.includes("BLANCA") || txt.includes("BLANCO")) return "lamina-blanca";
+  if (txt.includes("AZUL")) return "lamina-azul";
+  if (txt.includes("AMARILLA") || txt.includes("AMARILLO")) return "lamina-amarilla";
+  if (txt.includes("ROJA") || txt.includes("ROJO")) return "lamina-roja";
+  if (txt.includes("ROSADA") || txt.includes("ROSADO") || txt.includes("PINK")) return "lamina-rosada";
+  if (txt.includes("NARANJA")) return "lamina-naranja";
+
+  return "lamina-default";
+}
 function renderSummaryByLamina() {
   const rows = getFilteredScans();
   const map = {};
@@ -1323,7 +1406,8 @@ function renderSummaryByLamina() {
       .join("");
 
     const div = document.createElement("div");
-    div.className = "kpiCard laminaCard";
+const colorClass = getLaminaColorClass(lamina);
+div.className = `kpiCard laminaCard ${colorClass}`;
     div.innerHTML = `
       <div class="t">
         <div class="name" style="font-size:20px;">${lamina}</div>
