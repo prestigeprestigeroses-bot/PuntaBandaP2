@@ -68,13 +68,18 @@
 
     .chartWrap{
       position: relative;
-      border:1px solid var(--line);
+      border:1px solid rgba(96,165,250,.45);
       border-radius:12px;
-      background:linear-gradient(180deg, rgba(10,18,32,.35), rgba(10,18,32,.15));
+      background:
+        radial-gradient(circle at 50% 0%, rgba(59,130,246,.16), transparent 48%),
+        linear-gradient(180deg, rgba(5,12,26,.98), rgba(7,15,31,.94));
       margin-top:10px;
       overflow:hidden;
+      box-shadow:
+        inset 0 0 0 1px rgba(147,197,253,.08),
+        0 14px 30px rgba(0,0,0,.28);
     }
-    #chart{display:block;width:100%;height:360px}
+    #chart{display:block;width:100%;height:430px}
 
     .chartTip{
       position:absolute;
@@ -200,6 +205,7 @@
   background: linear-gradient(180deg, #0D3B66, #082f49) !important;
   border: 2px solid #22c55e !important;
 }
+
 /* Corrección definitiva para Lámina Blanca */
 .lamina-blanca,
 .lamina-blanca * {
@@ -226,6 +232,7 @@
 .lamina-blanca div[style*="border-top"] {
   border-top: 1px dashed #9ca3af !important;
 }
+
 .workerNameHeader {
   display: flex;
   align-items: center;
@@ -246,7 +253,9 @@
 }
 
 .scan-step {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   padding: 8px 14px;
   border-radius: 999px;
   font-size: 14px;
@@ -256,22 +265,35 @@
   color: #9bb0d0;
 }
 
+.scan-step b {
+  color: #ffffff;
+  font-size: 16px;
+  font-weight: 950;
+}
+
 .scan-step.done {
-  border-color: rgba(34,197,94,.7);
-  background: rgba(34,197,94,.18);
-  color: #86efac;
+  border-color: rgba(57,255,20,.95);
+  background: rgba(57,255,20,.24);
+  color: #b6ff00;
+  box-shadow:
+    0 0 12px rgba(57,255,20,.55),
+    inset 0 0 12px rgba(57,255,20,.18);
 }
 
 .scan-step.pending {
-  border-color: rgba(245,158,11,.65);
-  background: rgba(245,158,11,.14);
-  color: #fbbf24;
+  border-color: rgba(255,23,68,.95);
+  background: rgba(255,23,68,.24);
+  color: #ff5c7a;
+  box-shadow:
+    0 0 12px rgba(255,23,68,.58),
+    inset 0 0 12px rgba(255,23,68,.18);
 }
 
 .scan-missing-text {
   font-size: 12px;
   font-weight: 800;
-  color: #fbbf24;
+  color: #ff5c7a;
+  text-shadow: 0 0 10px rgba(255,23,68,.55);
 }
 
 .scan-missing-text.ready {
@@ -307,7 +329,7 @@
 <body>
 <div class="wrap">
   <div class="top">
-    <div class="title">GRAFICA - RENDIMIENTOS - PRESTIGE P2</div>
+    <div class="title">GRAFICA - RENDIMIENTOS - PRESTIGE P1</div>
     <div class="status">
       <span id="dot" class="dot"></span>
       <span id="st">Conectando…</span>
@@ -506,7 +528,7 @@ Código 4 (lámina): <span class="mono">L1</span><br><br>
 (() => {
   const API = (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")
     ? "http://127.0.0.1:3000"
-    : "https://puntabandap2-production.up.railway.app";
+    : "https://puntadebandap1prestige.up.railway.app";
 
   const $ = (id) => document.getElementById(id);
 
@@ -558,6 +580,8 @@ const lastLEl = $("lastLPending");
 
   let workers = ["B01","B02","B03","B04","B05","B06","B07","B08","B09","B10","B11","B12"];
   let workerNameMap = {};
+  let variedadNameMap = {};
+  let laminaNameMap = {};
   let scans = [];
   let pendingAll = {};
   let es = null;
@@ -567,7 +591,11 @@ const lastLEl = $("lastLPending");
   let pendingL = null;      // { raw, id }
   let pendingG = null;
 
-  const palette = ["#f3ff05","#16A34A","#F97316","#DC2626","#fc9df8","#a8e5f7","#EAB308","#059e8d","#6b8a7f","#18fa0c"];
+  const palette = [
+    "#FACC15", "#22C55E", "#F97316", "#EF4444",
+    "#EC4899", "#06B6D4", "#A855F7", "#14B8A6",
+    "#84CC16", "#3B82F6", "#FB7185", "#F59E0B"
+  ];
   const workerColors = {};
   workers.forEach((w, i) => workerColors[w] = palette[i % palette.length]);
 
@@ -576,6 +604,16 @@ const lastLEl = $("lastLPending");
     st.textContent = text;
     mode.textContent = m ? "· " + m : "";
   };
+
+  function escapeHtml(value) {
+    return String(value ?? "").replace(/[&<>"']/g, ch => ({
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&#039;"
+    }[ch]));
+  }
 
   function showOfflineStatus(text, type = "warn") {
   if (!offlineStatus) return;
@@ -762,6 +800,30 @@ function removeOfflineScan(idLocal) {
   }
 
   function crisp(v) { return Math.round(v) + 0.5; }
+  function hexToRgb(hex) {
+    const clean = String(hex || "").replace("#", "");
+    const full = clean.length === 3 ? clean.split("").map(ch => ch + ch).join("") : clean;
+    const n = parseInt(full, 16);
+    if (!Number.isFinite(n)) return { r: 59, g: 130, b: 246 };
+    return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
+  }
+
+  function rgbaFromHex(hex, alpha) {
+    const { r, g, b } = hexToRgb(hex);
+    return `rgba(${r},${g},${b},${alpha})`;
+  }
+
+  function fitCanvasText(ctx, text, maxWidth) {
+    const clean = String(text || "").trim();
+    if (!clean || ctx.measureText(clean).width <= maxWidth) return clean;
+
+    let out = clean;
+    while (out.length > 3 && ctx.measureText(out + "...").width > maxWidth) {
+      out = out.slice(0, -1);
+    }
+    return out.length > 3 ? out + "..." : clean.slice(0, 3);
+  }
+
   function roundRectPath(ctx, x, y, w, h, r){
     const rr = Math.min(r, w/2, h/2);
     ctx.beginPath();
@@ -794,8 +856,8 @@ function removeOfflineScan(idLocal) {
     const baseY = H - padB;
     const usableH = H - padT - padB - 35;
 
-    ctx.strokeStyle = "rgba(147,197,253,.55)";
-    ctx.lineWidth = 1.2;
+    ctx.strokeStyle = "rgba(147,197,253,.70)";
+    ctx.lineWidth = 1.6;
     ctx.beginPath();
     ctx.moveTo(padL, baseY);
     ctx.lineTo(padL, padT + 10);
@@ -803,8 +865,8 @@ function removeOfflineScan(idLocal) {
 
     ctx.textAlign = "right";
     ctx.textBaseline = "middle";
-    ctx.font = "600 11px system-ui, -apple-system, Segoe UI, Roboto, Arial";
-    ctx.fillStyle = "rgba(214,230,255,.95)";
+    ctx.font = "800 12px system-ui, -apple-system, Segoe UI, Roboto, Arial";
+    ctx.fillStyle = "rgba(226,238,255,.98)";
     ctx.strokeStyle = "rgba(147,197,253,.25)";
 
     const step = niceMax / ticks;
@@ -823,13 +885,13 @@ function removeOfflineScan(idLocal) {
     ctx.save();
     ctx.translate(padL - 32, padT + (usableH / 2));
     ctx.rotate(-Math.PI / 2);
-    ctx.font = "700 12px system-ui, -apple-system, Segoe UI, Roboto, Arial";
-    ctx.fillStyle = "rgba(214,230,255,.85)";
+    ctx.font = "900 13px system-ui, -apple-system, Segoe UI, Roboto, Arial";
+    ctx.fillStyle = "rgba(226,238,255,.95)";
     ctx.fillText(label, 0, 0);
     ctx.restore();
 
-    ctx.strokeStyle = "rgba(147,197,253,.55)";
-    ctx.lineWidth = 1.2;
+    ctx.strokeStyle = "rgba(147,197,253,.70)";
+    ctx.lineWidth = 1.6;
     ctx.beginPath();
     ctx.moveTo(padL, baseY + 0.5);
     ctx.lineTo(W - padR, baseY + 0.5);
@@ -838,10 +900,11 @@ function removeOfflineScan(idLocal) {
 
   function drawAxisX(ctx, padL, padR, padT, padB, W, H, displayWorkers, workerNameMap, groupW, label = "") {
     const baseY = H - padB;
+    const labelMaxW = Math.max(58, groupW - 14);
 
     ctx.textAlign = "right";
     ctx.textBaseline = "top";
-    ctx.font = "600 11px system-ui, -apple-system, Segoe UI, Roboto, Arial";
+    ctx.font = "900 14px system-ui, -apple-system, Segoe UI, Roboto, Arial";
 
     for (let i = 0; i < displayWorkers.length; i++) {
       const w = displayWorkers[i];
@@ -855,15 +918,23 @@ function removeOfflineScan(idLocal) {
       ctx.stroke();
 
       const name = (workerNameMap[w] || "").trim();
-      const show = name && name.toUpperCase() !== w ? name : w;
+      const showName = name && name.toUpperCase() !== w ? name : "";
+      const hex = workerColors[w] || "#93C5FD";
 
       ctx.save();
       ctx.translate(cx, baseY + 8);
       ctx.rotate(0);
       ctx.textAlign = "center";
       ctx.textBaseline = "top";
-      ctx.fillStyle = "rgba(214,230,255,.9)";
-      ctx.fillText(show, 0, 0);
+      ctx.shadowColor = rgbaFromHex(hex, .65);
+      ctx.shadowBlur = 8;
+      ctx.fillStyle = hex;
+      ctx.fillText(w, 0, 0);
+      if (showName) {
+        ctx.font = "900 12px system-ui, -apple-system, Segoe UI, Roboto, Arial";
+        ctx.fillStyle = hex;
+        ctx.fillText(fitCanvasText(ctx, showName.toUpperCase(), labelMaxW), 0, 19);
+      }
       ctx.restore();
     }
 
@@ -888,7 +959,7 @@ function removeOfflineScan(idLocal) {
     for (let i = 1; i <= ticks; i++) {
       const v = i * step;
       const y = baseY - (v / niceMax) * usableH;
-      ctx.strokeStyle = "rgba(31,51,88,.45)";
+      ctx.strokeStyle = "rgba(96,165,250,.22)";
       ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.moveTo(padL, crisp(y));
@@ -899,9 +970,26 @@ function removeOfflineScan(idLocal) {
 
   function getGradient(ctx, x, y, w, h, hex){
     const g = ctx.createLinearGradient(0, y, 0, y+h);
-    g.addColorStop(0, hex);
-    g.addColorStop(1, "rgba(255,255,255,0.10)");
+    g.addColorStop(0, "rgba(255,255,255,.95)");
+    g.addColorStop(0.12, hex);
+    g.addColorStop(0.68, hex);
+    g.addColorStop(1, rgbaFromHex(hex, .62));
     return g;
+  }
+
+  function drawChartBackground(ctx, W, H) {
+    const bg = ctx.createLinearGradient(0, 0, 0, H);
+    bg.addColorStop(0, "rgba(5,12,26,.98)");
+    bg.addColorStop(0.58, "rgba(8,18,37,.96)");
+    bg.addColorStop(1, "rgba(3,8,18,.98)");
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, W, H);
+
+    const glow = ctx.createRadialGradient(W * .5, 0, 0, W * .5, 0, Math.max(W, H) * .55);
+    glow.addColorStop(0, "rgba(59,130,246,.16)");
+    glow.addColorStop(1, "rgba(59,130,246,0)");
+    ctx.fillStyle = glow;
+    ctx.fillRect(0, 0, W, H);
   }
 
   function drawWorkerChart(displayWorkers, counts, stems, noAnimation = false) {
@@ -911,11 +999,7 @@ function removeOfflineScan(idLocal) {
     const W = cssW, H = cssH;
     ctx.clearRect(0, 0, W, H);
 
-    const bg = ctx.createLinearGradient(0, 0, 0, H);
-    bg.addColorStop(0, "rgba(11,18,32,0.55)");
-    bg.addColorStop(1, "rgba(11,18,32,0.20)");
-    ctx.fillStyle = bg;
-    ctx.fillRect(0, 0, W, H);
+    drawChartBackground(ctx, W, H);
 
     const values = displayWorkers.map(w => counts[w] || 0);
     const stemValues = displayWorkers.map(w => stems[w] || 0);
@@ -923,7 +1007,7 @@ function removeOfflineScan(idLocal) {
     const rawMax = Math.max(1, ...values);
     const niceMax = computeNiceMax(rawMax);
 
-    const padL = 44, padR = 24, padT = 36, padB = 60;
+    const padL = 56, padR = 36, padT = 48, padB = 92;
     const baseY = H - padB;
     const usableW = W - padL - padR;
     const usableH = H - padT - padB - 35;
@@ -931,8 +1015,8 @@ function removeOfflineScan(idLocal) {
     const winLabel = windowSel.value === "hour" ? "Última hora" : "Total hoy";
     const onlyActive = (activeSel.value === "active");
 
-    ctx.fillStyle = "white";
-    ctx.font = "700 14px system-ui, -apple-system, Segoe UI, Roboto, Arial";
+    ctx.fillStyle = "rgba(255,255,255,.98)";
+    ctx.font = "900 17px system-ui, -apple-system, Segoe UI, Roboto, Arial";
     ctx.textAlign = "left";
     ctx.fillText(`Rendimiento por bonchador (${winLabel})${onlyActive ? " — Solo activos" : ""}`, padL, padT);
 
@@ -954,7 +1038,7 @@ function removeOfflineScan(idLocal) {
     drawAxisY(ctx, padL, padR, padT, padB, W, H, niceMax, 5, "Ramos");
 
     const groupW = usableW / Math.max(1, displayWorkers.length);
-    const barW = Math.max(22, Math.min(62, groupW - 14));
+    const barW = Math.max(34, Math.min(82, groupW - 20));
     drawAxisX(ctx, padL, padR, padT, padB, W, H, displayWorkers, workerNameMap, groupW, "");
 
     const radius = Math.min(10, barW/2);
@@ -990,31 +1074,52 @@ function removeOfflineScan(idLocal) {
         const y = baseY - h;
 
         const hex = (workerColors[w] || "#3B82F6");
-        ctx.fillStyle = hex;
-roundRectPath(ctx, x, y, barW, h, radius);
-ctx.fill();
 
-        ctx.strokeStyle = "rgba(0,0,0,.25)";
-        ctx.lineWidth = 1;
+        ctx.save();
+        ctx.shadowColor = rgbaFromHex(hex, .58);
+        ctx.shadowBlur = 18;
+        ctx.fillStyle = getGradient(ctx, x, y, barW, Math.max(h, 1), hex);
+        roundRectPath(ctx, x, y, barW, h, radius);
+        ctx.fill();
+        ctx.restore();
+
+        ctx.strokeStyle = rgbaFromHex(hex, .95);
+        ctx.lineWidth = 2;
         roundRectPath(ctx, x, y, barW, h, radius);
         ctx.stroke();
+
+        ctx.fillStyle = "rgba(255,255,255,.24)";
+        roundRectPath(ctx, x + 7, y + 8, Math.max(5, barW * .18), Math.max(0, h - 16), Math.min(8, radius));
+        ctx.fill();
 
         const line1 = `${t} tallos`;
         const line2 = `${r} ramos`;
         const cx = x + (barW / 2);
 
-        ctx.font = "700 12px system-ui, -apple-system, Segoe UI, Roboto, Arial";
-        ctx.fillStyle = "white";
+        ctx.font = "900 13px system-ui, -apple-system, Segoe UI, Roboto, Arial";
         if (h < 44) {
+          ctx.fillStyle = "rgba(3,7,18,.82)";
+          roundRectPath(ctx, cx - 38, y - 39, 76, 35, 8);
+          ctx.fill();
+          ctx.strokeStyle = rgbaFromHex(hex, .75);
+          ctx.lineWidth = 1.3;
+          roundRectPath(ctx, cx - 38, y - 39, 76, 35, 8);
+          ctx.stroke();
+          ctx.fillStyle = "white";
           ctx.fillText(line1, cx, y - 18);
           ctx.fillText(line2, cx, y - 2);
         } else {
-          ctx.fillStyle = "rgba(0,0,0,0.28)";
-          roundRectPath(ctx, cx - (barW-10)/2, y + (h/2) - 20, barW-10, 40, 8);
+          const pillW = Math.max(barW + 16, 82);
+          ctx.fillStyle = "rgba(3,7,18,0.72)";
+          roundRectPath(ctx, cx - pillW/2, y + (h/2) - 24, pillW, 48, 10);
           ctx.fill();
+          ctx.strokeStyle = "rgba(255,255,255,.28)";
+          ctx.lineWidth = 1;
+          roundRectPath(ctx, cx - pillW/2, y + (h/2) - 24, pillW, 48, 10);
+          ctx.stroke();
           ctx.fillStyle = "white";
-          ctx.fillText(line1, cx, y + (h/2) - 4);
-          ctx.fillText(line2, cx, y + (h/2) + 12);
+          ctx.fillText(line1, cx, y + (h/2) - 6);
+          ctx.fillText(line2, cx, y + (h/2) + 13);
         }
 
         barRects.push({x, y, w: barW, h, worker: w, ramos: r, tallos: t, cx});
@@ -1027,18 +1132,14 @@ ctx.fill();
 
       const W = cssW, H = cssH;
       ctx.clearRect(0,0,W,H);
-      const bg = ctx.createLinearGradient(0, 0, 0, H);
-      bg.addColorStop(0, "rgba(11,18,32,0.55)");
-      bg.addColorStop(1, "rgba(11,18,32,0.20)");
-      ctx.fillStyle = bg;
-      ctx.fillRect(0, 0, W, H);
+      drawChartBackground(ctx, W, H);
 
-      const padL = 44, padR = 24, padT = 36, padB = 60;
+      const padL = 56, padR = 36, padT = 48, padB = 92;
       const winLabel = windowSel.value === "hour" ? "Última hora" : "Total hoy";
       const onlyActive = (activeSel.value === "active");
 
-      ctx.fillStyle = "white";
-      ctx.font = "700 14px system-ui, -apple-system, Segoe UI, Roboto, Arial";
+      ctx.fillStyle = "rgba(255,255,255,.98)";
+      ctx.font = "900 17px system-ui, -apple-system, Segoe UI, Roboto, Arial";
       ctx.textAlign = "left";
       ctx.fillText(`Rendimiento por bonchador (${winLabel})${onlyActive ? " — Solo activos" : ""}`, padL, padT);
 
@@ -1392,6 +1493,7 @@ function getLaminaColorClass(nombreLamina) {
 
   return "lamina-default";
 }
+
 function renderSummaryByLamina() {
   const rows = getFilteredScans();
   const map = {};
@@ -1469,6 +1571,7 @@ div.className = `kpiCard laminaCard ${colorClass}`;
   }
 }
 
+
 function renderSummaryByVariedad() {
   const rows = getFilteredScans();
   const map = {};
@@ -1507,6 +1610,18 @@ function renderAll() {
   renderSummaryByLamina();
   renderSummaryByVariedad();
   renderTable();
+}
+
+function rememberCatalogNames(rows = scans) {
+  for (const r of rows || []) {
+    const variedadId = String(r.variedad_id || "").trim().toUpperCase();
+    const variedadNombre = String(r.variedad_nombre || "").trim();
+    if (variedadId && variedadNombre) variedadNameMap[variedadId] = variedadNombre;
+
+    const laminaId = String(r.lamina_id || "").trim().toUpperCase();
+    const laminaNombre = String(r.lamina_nombre || "").trim();
+    if (laminaId && laminaNombre) laminaNameMap[laminaId] = laminaNombre;
+  }
 }
 
   async function loadWorkers() {
@@ -1549,7 +1664,10 @@ function renderAll() {
     ]);
 
     if (pRes && pRes.ok) pendingAll = await pRes.json();
-    if (sRes && sRes.ok) scans = await sRes.json();
+    if (sRes && sRes.ok) {
+      scans = await sRes.json();
+      rememberCatalogNames(scans);
+    }
     renderAll();
   }
 
@@ -1646,6 +1764,69 @@ function parseG(code) {
   };
 }
 
+function displayWorkerScan() {
+  if (!pendingWorker) return "";
+
+  const code = pendingWorker.code || pendingWorker.raw;
+  const name = String(workerNameMap[code] || "").trim();
+
+  if (name && name !== code) return `${name} (${pendingWorker.raw})`;
+  return pendingWorker.raw;
+}
+
+function displayVariedadScan() {
+  if (!pendingV) return "";
+
+  const code = pendingV.variedad || pendingV.raw;
+  const name = String(variedadNameMap[code] || "").trim();
+
+  if (name && name !== code) return `${name} (${code})`;
+  return code;
+}
+
+function displayGradoScan() {
+  if (!pendingG) return "";
+  return `Grado ${pendingG.grado || pendingG.raw}`;
+}
+
+function displayLaminaScan() {
+  if (!pendingL) return "";
+
+  const code = pendingL.id || pendingL.raw;
+  const name = String(laminaNameMap[code] || "").trim();
+
+  if (name && name !== code) return `${name} (${code})`;
+  return code;
+}
+
+async function loadVariedadName(vObj) {
+  const code = vObj?.variedad || vObj?.raw;
+  if (!code || variedadNameMap[code]) return;
+
+  try {
+    const res = await fetch(`${API}/api/variedades/${encodeURIComponent(code)}`, { cache: "no-store" });
+    const data = await res.json().catch(() => ({}));
+    if (res.ok && data?.nombre) {
+      variedadNameMap[code] = data.nombre;
+      updateScanProgressUI();
+    }
+  } catch {}
+}
+
+async function loadLaminaName(lObj) {
+  const code = lObj?.id || lObj?.raw;
+  if (!code || laminaNameMap[code]) return;
+
+  try {
+    const res = await fetch(`${API}/api/laminas/${encodeURIComponent(code)}`, { cache: "no-store" });
+    const data = await res.json().catch(() => ({}));
+    if (res.ok && data?.nombre) {
+      laminaNameMap[code] = data.nombre;
+      updateScanProgressUI();
+    }
+  } catch {}
+}
+
   function setLastWorkerUI(txt) {
     if (!lastWorkerEl) return;
     if (txt) { lastWorkerEl.textContent = txt; lastWorkerEl.className = "mono okTxt"; }
@@ -1677,10 +1858,10 @@ function parseG(code) {
 
   function updateScanProgressUI() {
   const steps = [
-    { el: stepWorker, label: "Bonchador", done: !!pendingWorker },
-    { el: stepVariedad, label: "Variedad", done: !!pendingV },
-    { el: stepGrado, label: "Grado", done: !!pendingG },
-    { el: stepLamina, label: "Lámina", done: !!pendingL }
+    { el: stepWorker, label: "Bonchador", done: !!pendingWorker, value: displayWorkerScan() },
+    { el: stepVariedad, label: "Variedad", done: !!pendingV, value: displayVariedadScan() },
+    { el: stepGrado, label: "Grado", done: !!pendingG, value: displayGradoScan() },
+    { el: stepLamina, label: "Lámina", done: !!pendingL, value: displayLaminaScan() }
   ];
 
   const faltantes = [];
@@ -1692,8 +1873,8 @@ function parseG(code) {
     s.el.classList.toggle("pending", !s.done);
 
     s.el.innerHTML = s.done
-      ? `<span>${s.label}</span><b>OK</b>`
-      : `<span>${s.label}</span><b>Falta</b>`;
+      ? `<span>${escapeHtml(s.label)}</span><b>${escapeHtml(s.value)}</b>`
+      : `<span>${escapeHtml(s.label)}</span><b>Falta</b>`;
 
     if (!s.done) faltantes.push(s.label);
   }
@@ -1752,7 +1933,8 @@ function parseG(code) {
     };
   }
 }
-function addScanIfNotExists(reg) {
+
+  function addScanIfNotExists(reg) {
   if (!reg || reg.id == null) return;
 
   const exists = scans.some(r => String(r.id) === String(reg.id));
@@ -1769,22 +1951,23 @@ function addScanIfNotExists(reg) {
   async function trySendCombo() {
   if (!(pendingWorker && pendingV && pendingG && pendingL)) return;
 
-  const payload = {
-    worker: pendingWorker.raw,
-    variedad: pendingV.raw,
-    grado: pendingG.raw,
-    lamina: pendingL.raw
+  const combo = {
+    worker: pendingWorker,
+    variedad: pendingV,
+    grado: pendingG,
+    lamina: pendingL
   };
 
-  const out = await sendToServer(payload);
+  const payload = {
+    worker: combo.worker.raw,
+    variedad: combo.variedad.raw,
+    grado: combo.grado.raw,
+    lamina: combo.lamina.raw
+  };
 
-  if (!out.ok) {
-    const msg = out.data?.error || "ERROR";
-    lastScanEl.textContent = `${pendingWorker.raw} / ${pendingV.raw} / ${pendingG.raw} / ${pendingL.raw} (${msg})`;
-    return;
-  }
+  const comboText = `${payload.worker} / ${payload.variedad} / ${payload.grado} / ${payload.lamina}`;
 
-  // Limpia los 4 escaneos pendientes, tanto si guardó online como offline
+  if (pendingWorker === combo.worker && pendingV === combo.variedad && pendingG === combo.grado && pendingL === combo.lamina) {
   pendingWorker = null;
   pendingV = null;
   pendingG = null;
@@ -1795,11 +1978,20 @@ function addScanIfNotExists(reg) {
   setLastGUI(null);
   setLastLUI(null);
 
+  lastScanEl.textContent = `${comboText} (enviando...)`;
   updateScanProgressUI();
+  }
 
-  // Caso sin internet: quedó guardado localmente
+  sendToServer(payload).then(async (out) => {
+
+  if (!out.ok) {
+    const msg = out.data?.error || "ERROR";
+    lastScanEl.textContent = `${comboText} (${msg})`;
+    return;
+  }
+
   if (out.offline) {
-  lastScanEl.textContent = "SIN INTERNET → Registro guardado offline pendiente por sincronizar";
+  lastScanEl.textContent = `${comboText} (SIN INTERNET, guardado offline)`;
 
   const pendientes = getOfflineQueue().length;
   showOfflineStatus(`SIN INTERNET · ${pendientes} registro(s) offline pendiente(s)`, "warn");
@@ -1814,6 +2006,7 @@ function addScanIfNotExists(reg) {
   // Caso normal: guardado en servidor
   if (out.data?.reg) {
   addScanIfNotExists(out.data.reg);
+  lastScanEl.textContent = `${comboText} (registrado)`;
   renderAll();
 
   if (typeof playOkSound === "function") {
@@ -1822,6 +2015,9 @@ function addScanIfNotExists(reg) {
 } else {
   await refreshAll();
 }
+}).catch(() => {
+  lastScanEl.textContent = `${comboText} (ERROR ENVIANDO)`;
+});
 }
 
 async function syncOfflineScans() {
@@ -1878,6 +2074,7 @@ if (isV) {
   pendingV = v;
   setLastVUI(pendingV.raw);
   updateScanProgressUI();
+  loadVariedadName(pendingV);
   await trySendCombo();
   return;
 }
@@ -1894,6 +2091,7 @@ if (isL) {
   pendingL = l;
   setLastLUI(pendingL.raw);
   updateScanProgressUI();
+  loadLaminaName(pendingL);
   await trySendCombo();
 }
 }
@@ -1998,6 +2196,7 @@ document.addEventListener("keydown", async (e) => {
 
         if (msg.kind === "snapshot") {
           scans = msg.snapshot || [];
+          rememberCatalogNames(scans);
           pendingAll = msg.pending || {};
           if (msg.workers) {
             workers = msg.workers.map(x => String(x.code).trim().toUpperCase());
@@ -2027,6 +2226,7 @@ document.addEventListener("keydown", async (e) => {
         }
 
         if (msg.kind === "scan" && msg.reg) {
+  rememberCatalogNames([msg.reg]);
   addScanIfNotExists(msg.reg);
   renderFast();
   return;
