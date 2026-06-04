@@ -7,11 +7,13 @@
 //   • Lámina           : L1, L2, L3 ...
 //
 // Guarda en DB:
-//   worker, tallos, variedad_id, grado_cm, lamina_id
+//   worker, worker_name, tallos, variedad_id, grado_cm, lamina_id, lamina_nombre
 //
 // Requisito en DB:
 //   ALTER TABLE public.scans
 //   ADD COLUMN IF NOT EXISTS lamina_id character varying(20);
+//   ADD COLUMN IF NOT EXISTS worker_name character varying(120);
+//   ADD COLUMN IF NOT EXISTS lamina_nombre character varying(120);
 //
 // Incluye SSE para actualizaciones en tiempo real.
 // -------------------------------------------------------------
@@ -36,6 +38,14 @@ const pool = new Pool({
   ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false,
 });
 
+async function ensureSchema() {
+  await pool.query(`
+    ALTER TABLE public.scans
+    ADD COLUMN IF NOT EXISTS worker_name character varying(120),
+    ADD COLUMN IF NOT EXISTS lamina_nombre character varying(120)
+  `);
+}
+
 // -----------------------------
 // Configuración y estado
 // -----------------------------
@@ -44,6 +54,12 @@ const WORKER_MAX = 12;
 
 // Mapa en memoria de nombres de bonchadores (p.ej. { B16: "Juan" })
 let workerNameMap = {};
+
+function getWorkerNameSnapshot(workerCode) {
+  const code = String(workerCode || "").trim().toUpperCase();
+  const name = String(workerNameMap[code] || "").trim();
+  return name || code;
+}
 
 // Conjunto de clientes SSE conectados
 const clients = new Set();
@@ -90,6 +106,7 @@ app.get("/api/scans", async (req, res) => {
         s.id,
         s.ts, 
         s.worker, 
+        s.worker_name,
         s.tallos, 
         s.variedad_id, 
         s.grado_cm,
@@ -97,7 +114,7 @@ app.get("/api/scans", async (req, res) => {
         s.raw_a,
         s.raw_b,
         COALESCE(v.nombre, s.variedad_id) AS variedad_nombre,
-        COALESCE(l.nombre, s.lamina_id) AS lamina_nombre
+        COALESCE(s.lamina_nombre, l.nombre, s.lamina_id) AS lamina_nombre
       FROM scans s
       LEFT JOIN variedades v ON s.variedad_id = v.id
       LEFT JOIN lamina l ON s.lamina_id = l.id
@@ -109,7 +126,7 @@ app.get("/api/scans", async (req, res) => {
 
     const finalData = result.rows.map((row) => ({
       ...row,
-      worker_name: row.worker ? (workerNameMap[row.worker] || row.worker) : null,
+      worker_name: row.worker_name || (row.worker ? getWorkerNameSnapshot(row.worker) : null),
     }));
 
     res.json(finalData);
@@ -293,38 +310,43 @@ app.get("/api/laminas/:id", async (req, res) => {
    GUARDADO EN DB
    ========================================================== */
 
-async function saveScan(wObj, vObj, gObj, lObj, variedadNombre) {
+async function saveScan(wObj, vObj, gObj, lObj, variedadNombre, laminaNombre) {
   const client = await pool.connect();
 
   try {
     const localTimestamp = new Date();
+    const workerName = getWorkerNameSnapshot(wObj.code);
 
     const query = `
       INSERT INTO scans (
         ts,
         worker,
+        worker_name,
         tallos,
         variedad_id,
         variedad_nombre,
         grado_cm,
         raw_a,
         raw_b,
-        lamina_id
+        lamina_id,
+        lamina_nombre
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
       RETURNING *
     `;
 
     const values = [
       localTimestamp,
       wObj.code,           // B01
+      workerName,          // Nombre actual del bonchador
       wObj.tallos,         // 20
       vObj.variedad_id,    // V01
       variedadNombre,
       gObj.grado_cm,       // 60
       wObj.raw,            // B01-T20
       `${vObj.raw}-${gObj.raw}`, // V01-G60
-      lObj.id              // L1
+      lObj.id,             // L1
+      laminaNombre || lObj.id
     ];
 
     const result = await client.query(query, values);
@@ -400,13 +422,13 @@ app.post("/api/scan", async (req, res) => {
       });
     }
 
-    const savedReg = await saveScan(wObj, vObj, gObj, lObj, variedadDb.nombre);
+    const savedReg = await saveScan(wObj, vObj, gObj, lObj, variedadDb.nombre, laminaDb.nombre);
 
     const broadcastData = {
       ...savedReg,
       variedad_nombre: variedadDb.nombre || vObj.variedad_id,
-      worker_name: workerNameMap[savedReg.worker] || savedReg.worker,
-      lamina_nombre: laminaDb.nombre || lObj.id,
+      worker_name: savedReg.worker_name || getWorkerNameSnapshot(savedReg.worker),
+      lamina_nombre: savedReg.lamina_nombre || laminaDb.nombre || lObj.id,
     };
 
     broadcast({ kind: "scan", reg: broadcastData });
@@ -498,6 +520,16 @@ app.get("/api/stream", (req, res) => {
    ========================================================== */
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, "0.0.0.0", () => {
-  console.log(`Servidor en puerto ${PORT} (Formatos: Bxx-Tyy, Vxx-gg y Lx)`);
+
+async function startServer() {
+  await ensureSchema();
+
+  app.listen(PORT, "0.0.0.0", () => {
+    console.log(`Servidor en puerto ${PORT} (Formatos: Bxx-Tyy, Vxx-gg y Lx)`);
+  });
+}
+
+startServer().catch((err) => {
+  console.error("Error iniciando servidor:", err);
+  process.exit(1);
 });
