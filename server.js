@@ -310,11 +310,10 @@ app.get("/api/laminas/:id", async (req, res) => {
    GUARDADO EN DB
    ========================================================== */
 
-async function saveScan(wObj, vObj, gObj, lObj, variedadNombre, laminaNombre) {
+async function saveScan(wObj, vObj, gObj, lObj, variedadNombre, laminaNombre, cantidadRamos = 1) {
   const client = await pool.connect();
 
   try {
-    const localTimestamp = new Date();
     const workerName = getWorkerNameSnapshot(wObj.code);
 
     const query = `
@@ -335,23 +334,36 @@ async function saveScan(wObj, vObj, gObj, lObj, variedadNombre, laminaNombre) {
       RETURNING *
     `;
 
-    const values = [
-      localTimestamp,
-      wObj.code,           // B01
-      workerName,          // Nombre actual del bonchador
-      wObj.tallos,         // 20
-      vObj.variedad_id,    // V01
-      variedadNombre,
-      gObj.grado_cm,       // 60
-      wObj.raw,            // B01-T20
-      `${vObj.raw}-${gObj.raw}`, // V01-G60
-      lObj.id,             // L1
-      laminaNombre || lObj.id
-    ];
+    const rows = [];
+    await client.query("BEGIN");
 
-    const result = await client.query(query, values);
-    return result.rows[0];
+    for (let i = 0; i < cantidadRamos; i++) {
+      const values = [
+        new Date(),
+        wObj.code,           // B01
+        workerName,          // Nombre actual del bonchador
+        wObj.tallos,         // 20
+        vObj.variedad_id,    // V01
+        variedadNombre,
+        gObj.grado_cm,       // 60
+        wObj.raw,            // B01-T20
+        `${vObj.raw}-${gObj.raw}`, // V01-G60
+        lObj.id,             // L1
+        laminaNombre || lObj.id
+      ];
 
+      const result = await client.query(query, values);
+      rows.push(result.rows[0]);
+    }
+
+    await client.query("COMMIT");
+    return rows;
+
+  } catch (err) {
+    try {
+      await client.query("ROLLBACK");
+    } catch {}
+    throw err;
   } finally {
     client.release();
   }
@@ -422,20 +434,41 @@ app.post("/api/scan", async (req, res) => {
       });
     }
 
-    const savedReg = await saveScan(wObj, vObj, gObj, lObj, variedadDb.nombre, laminaDb.nombre);
+    const cantidadRamosRaw = req.body?.cantidad_ramos ?? req.body?.ramos ?? 1;
+    const cantidadRamos = Number(cantidadRamosRaw);
 
-    const broadcastData = {
+    if (!Number.isInteger(cantidadRamos) || cantidadRamos < 1 || cantidadRamos > 500) {
+      return res.status(400).json({
+        error: "Cantidad de ramos invalida. Debe ser un numero entre 1 y 500",
+      });
+    }
+
+    const savedRegs = await saveScan(
+      wObj,
+      vObj,
+      gObj,
+      lObj,
+      variedadDb.nombre,
+      laminaDb.nombre,
+      cantidadRamos
+    );
+
+    const broadcastRows = savedRegs.map((savedReg) => ({
       ...savedReg,
       variedad_nombre: variedadDb.nombre || vObj.variedad_id,
       worker_name: savedReg.worker_name || getWorkerNameSnapshot(savedReg.worker),
       lamina_nombre: savedReg.lamina_nombre || laminaDb.nombre || lObj.id,
-    };
+    }));
 
-    broadcast({ kind: "scan", reg: broadcastData });
+    for (const reg of broadcastRows) {
+      broadcast({ kind: "scan", reg });
+    }
 
     return res.json({
       ok: true,
-      reg: broadcastData,
+      reg: broadcastRows[0],
+      regs: broadcastRows,
+      cantidad_ramos: cantidadRamos,
     });
 
   } catch (err) {

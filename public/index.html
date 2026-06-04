@@ -31,6 +31,10 @@
     .hint{color:var(--muted);font-size:12px;line-height:1.35}
     .split{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap}
     .scanBox{border:1px dashed rgba(155,176,208,.5);border-radius:14px;padding:10px;background:rgba(10,18,32,.22);margin-top:10px}
+    .t6-ramos-box{display:none;gap:8px;margin-top:10px;padding:12px;border:1px solid rgba(250,204,21,.65);border-radius:12px;background:rgba(113,63,18,.35)}
+    .t6-ramos-box.active{display:grid}
+    .t6-ramos-title{font-size:13px;font-weight:800;color:#fde68a}
+    .t6-ramos-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}
     .okTxt{color:rgba(34,197,94,.95)}
     .warnTxt{color:rgba(255, 0, 0, 0.95)}
     /* =========================
@@ -375,6 +379,15 @@
   <div id="scanMissingText" class="scan-missing-text">
     Faltan 4 escaneos
   </div>
+
+  <div id="t6RamosBox" class="t6-ramos-box">
+    <div class="t6-ramos-title">Tallos x 6: coloque la cantidad de ramos</div>
+    <input id="t6RamosInput" type="number" min="1" max="500" step="1" placeholder="Cantidad de ramos" />
+    <div class="t6-ramos-actions">
+      <button id="btnT6Ramos" type="button">Enviar</button>
+      <button id="btnT6Cancel" class="ghost" type="button">Cancelar</button>
+    </div>
+  </div>
 </div>
     <div id="offlineStatus" class="pill mono" style="display:none;"></div>
   </div>
@@ -567,6 +580,10 @@ const stepVariedad = $("stepVariedad");
 const stepGrado = $("stepGrado");
 const stepLamina = $("stepLamina");
 const scanMissingText = $("scanMissingText");
+const t6RamosBox = $("t6RamosBox");
+const t6RamosInput = $("t6RamosInput");
+const btnT6Ramos = $("btnT6Ramos");
+const btnT6Cancel = $("btnT6Cancel");
 
   const lastWorkerEl = $("lastWorkerForV");
   const lastVEl = $("lastVPending");
@@ -590,6 +607,7 @@ const lastLEl = $("lastLPending");
   let pendingV = null;      // { raw, variedad, grado }
   let pendingL = null;      // { raw, id }
   let pendingG = null;
+  let pendingT6Combo = null;
 
   const palette = [
     "#FACC15", "#22C55E", "#F97316", "#EF4444",
@@ -1948,6 +1966,106 @@ async function loadLaminaName(lObj) {
   }
 }
 
+function showT6RamosPrompt(combo, payload, comboText) {
+  pendingT6Combo = { combo, payload, comboText };
+  suspendAutoFocus = true;
+
+  if (t6RamosBox) t6RamosBox.classList.add("active");
+  if (t6RamosInput) {
+    t6RamosInput.value = "";
+    t6RamosInput.focus();
+  }
+
+  if (scanMissingText) {
+    scanMissingText.textContent = "Tallos x 6: escriba cuantos ramos fueron y pulse Enviar";
+    scanMissingText.classList.add("ready");
+  }
+
+  lastScanEl.textContent = `${comboText} (faltan ramos x 6)`;
+}
+
+function hideT6RamosPrompt() {
+  pendingT6Combo = null;
+  if (t6RamosBox) t6RamosBox.classList.remove("active");
+  if (t6RamosInput) t6RamosInput.value = "";
+  suspendAutoFocus = false;
+}
+
+function clearPendingCombo(combo, comboText, message = "enviando...") {
+  if (pendingWorker === combo.worker && pendingV === combo.variedad && pendingG === combo.grado && pendingL === combo.lamina) {
+    pendingWorker = null;
+    pendingV = null;
+    pendingG = null;
+    pendingL = null;
+
+    setLastWorkerUI(null);
+    setLastVUI(null);
+    setLastGUI(null);
+    setLastLUI(null);
+
+    lastScanEl.textContent = `${comboText} (${message})`;
+    updateScanProgressUI();
+  }
+}
+
+function addReturnedScans(data) {
+  const regs = Array.isArray(data?.regs) ? data.regs : (data?.reg ? [data.reg] : []);
+  for (const reg of regs) {
+    rememberCatalogNames([reg]);
+    addScanIfNotExists(reg);
+  }
+  return regs.length;
+}
+
+async function sendT6ComboPayload(payload, comboText) {
+  try {
+    const out = await sendToServer(payload);
+
+    if (!out.ok) {
+      const msg = out.data?.error || "ERROR";
+      lastScanEl.textContent = `${comboText} (${msg})`;
+      return;
+    }
+
+    const cantidad = Number(payload.cantidad_ramos || 1);
+
+    if (out.offline) {
+      lastScanEl.textContent = `${comboText} (${cantidad} ramo(s), SIN INTERNET, guardado offline)`;
+      const pendientes = getOfflineQueue().length;
+      showOfflineStatus(`SIN INTERNET - ${pendientes} registro(s) offline pendiente(s)`, "warn");
+      if (typeof playOkSound === "function") playOkSound();
+      return;
+    }
+
+    const guardados = addReturnedScans(out.data);
+    lastScanEl.textContent = `${comboText} (${guardados || cantidad} ramo(s) registrado(s))`;
+    renderAll();
+    if (typeof playOkSound === "function") playOkSound();
+  } catch {
+    lastScanEl.textContent = `${comboText} (ERROR ENVIANDO)`;
+  }
+}
+
+async function submitT6Ramos() {
+  if (!pendingT6Combo) return;
+
+  const cantidad = Number(t6RamosInput?.value || 0);
+
+  if (!Number.isInteger(cantidad) || cantidad < 1 || cantidad > 500) {
+    lastScanEl.textContent = "Tallos x 6: coloque una cantidad valida entre 1 y 500";
+    t6RamosInput?.focus();
+    return;
+  }
+
+  const { combo, payload, comboText } = pendingT6Combo;
+  payload.cantidad_ramos = cantidad;
+
+  hideT6RamosPrompt();
+  clearPendingCombo(combo, comboText, `enviando ${cantidad} ramo(s)...`);
+  await sendT6ComboPayload(payload, comboText);
+  focusScanInput();
+}
+
   async function trySendCombo() {
   if (!(pendingWorker && pendingV && pendingG && pendingL)) return;
 
@@ -1966,6 +2084,11 @@ async function loadLaminaName(lObj) {
   };
 
   const comboText = `${payload.worker} / ${payload.variedad} / ${payload.grado} / ${payload.lamina}`;
+
+  if (Number(combo.worker.tallos) === 6) {
+    showT6RamosPrompt(combo, payload, comboText);
+    return;
+  }
 
   if (pendingWorker === combo.worker && pendingV === combo.variedad && pendingG === combo.grado && pendingL === combo.lamina) {
   pendingWorker = null;
@@ -2173,6 +2296,17 @@ document.addEventListener("keydown", async (e) => {
   activeSel.addEventListener("change", renderAll);
   btnSaveNames.addEventListener("click", saveNames);
   workerFilter?.addEventListener("change", renderAll);
+  btnT6Ramos?.addEventListener("click", submitT6Ramos);
+  btnT6Cancel?.addEventListener("click", () => {
+    hideT6RamosPrompt();
+    limpiarEscaneoPendiente("Ramos x 6 cancelados");
+    focusScanInput();
+  });
+  t6RamosInput?.addEventListener("keydown", async (e) => {
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    await submitT6Ramos();
+  });
 
   let pollTimer = null;
 
