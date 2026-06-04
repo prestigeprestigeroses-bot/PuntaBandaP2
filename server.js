@@ -243,11 +243,57 @@ async function getLaminaActiva(laminaId) {
   return result.rows[0];
 }
 
+app.get("/api/variedades/:id", async (req, res) => {
+  try {
+    const vObj = parseVariedad(req.params.id);
+    if (!vObj) {
+      return res.status(400).json({ error: "Variedad inválida" });
+    }
+
+    const variedad = await getVariedadById(vObj.variedad_id);
+    if (!variedad) {
+      return res.status(404).json({ error: "Variedad no encontrada" });
+    }
+
+    res.json(variedad);
+  } catch (err) {
+    console.error("GET /api/variedades/:id error:", err);
+    res.status(500).json({ error: "Error en DB" });
+  }
+});
+
+app.get("/api/laminas/:id", async (req, res) => {
+  try {
+    const lObj = parseLamina(req.params.id);
+    if (!lObj) {
+      return res.status(400).json({ error: "Lámina inválida" });
+    }
+
+    const lamina = await getLaminaActiva(lObj.id);
+    if (!lamina) {
+      return res.status(404).json({ error: "Lámina no encontrada" });
+    }
+
+    if (lamina.invalida) {
+      return res.status(400).json({ error: "Lámina inactiva" });
+    }
+
+    res.json({
+      id: lamina.id,
+      nombre: lamina.nombre,
+      activo: lamina.activo
+    });
+  } catch (err) {
+    console.error("GET /api/laminas/:id error:", err);
+    res.status(500).json({ error: "Error en DB" });
+  }
+});
+
 /* ==========================================================
    GUARDADO EN DB
    ========================================================== */
 
-async function saveScan(wObj, vObj, gObj, lObj) {
+async function saveScan(wObj, vObj, gObj, lObj, variedadNombre) {
   const client = await pool.connect();
 
   try {
@@ -259,12 +305,13 @@ async function saveScan(wObj, vObj, gObj, lObj) {
         worker,
         tallos,
         variedad_id,
+        variedad_nombre,
         grado_cm,
         raw_a,
         raw_b,
         lamina_id
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
       RETURNING *
     `;
 
@@ -273,6 +320,7 @@ async function saveScan(wObj, vObj, gObj, lObj) {
       wObj.code,           // B01
       wObj.tallos,         // 20
       vObj.variedad_id,    // V01
+      variedadNombre,
       gObj.grado_cm,       // 60
       wObj.raw,            // B01-T20
       `${vObj.raw}-${gObj.raw}`, // V01-G60
@@ -352,7 +400,7 @@ app.post("/api/scan", async (req, res) => {
       });
     }
 
-    const savedReg = await saveScan(wObj, vObj, gObj, lObj);
+    const savedReg = await saveScan(wObj, vObj, gObj, lObj, variedadDb.nombre);
 
     const broadcastData = {
       ...savedReg,
