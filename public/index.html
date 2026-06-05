@@ -385,7 +385,7 @@
   </div>
 
   <div id="t6RamosBox" class="t6-ramos-box">
-    <div class="t6-ramos-title">Tallos x 6: coloque la cantidad de ramos</div>
+    <div class="t6-ramos-title">PVC: coloque la cantidad de ramos</div>
     <div id="t6WorkerInfo" class="t6-worker-info">Bonchador: —</div>
     <input id="t6RamosInput" type="number" min="1" max="500" step="1" placeholder="Cantidad de ramos" />
     <div class="t6-ramos-actions">
@@ -1978,10 +1978,11 @@ function showT6RamosPrompt(combo, payload, comboText) {
 
   const workerCode = combo.worker.code || combo.worker.raw;
   const workerName = String(workerNameMap[workerCode] || "").trim();
+  const tallos = Number(combo.worker.tallos || 0);
   if (t6WorkerInfo) {
     t6WorkerInfo.textContent = workerName && workerName !== workerCode
-      ? `Bonchador: ${workerName} (${workerCode})`
-      : `Bonchador: ${workerCode}`;
+      ? `Bonchador: ${workerName} (${workerCode}) - T${tallos}`
+      : `Bonchador: ${workerCode} - T${tallos}`;
   }
 
   if (t6RamosBox) t6RamosBox.classList.add("active");
@@ -1991,11 +1992,11 @@ function showT6RamosPrompt(combo, payload, comboText) {
   }
 
   if (scanMissingText) {
-    scanMissingText.textContent = "Tallos x 6: escriba cuantos ramos fueron y pulse Enviar";
+    scanMissingText.textContent = `PVC T${tallos}: escriba cuantos ramos fueron y pulse Enviar`;
     scanMissingText.classList.add("ready");
   }
 
-  lastScanEl.textContent = `${comboText} (faltan ramos x 6)`;
+  lastScanEl.textContent = `${comboText} (faltan ramos PVC T${tallos})`;
 }
 
 function hideT6RamosPrompt() {
@@ -2066,7 +2067,7 @@ async function submitT6Ramos() {
   const cantidad = Number(t6RamosInput?.value || 0);
 
   if (!Number.isInteger(cantidad) || cantidad < 1 || cantidad > 500) {
-    lastScanEl.textContent = "Tallos x 6: coloque una cantidad valida entre 1 y 500";
+    lastScanEl.textContent = "PVC: coloque una cantidad valida entre 1 y 500";
     t6RamosInput?.focus();
     return;
   }
@@ -2099,7 +2100,7 @@ async function submitT6Ramos() {
 
   const comboText = `${payload.worker} / ${payload.variedad} / ${payload.grado} / ${payload.lamina}`;
 
-  if (Number(combo.worker.tallos) === 6 && String(combo.lamina.id || combo.lamina.raw).toUpperCase() === "L6") {
+  if ([6, 10, 12].includes(Number(combo.worker.tallos)) && String(combo.lamina.id || combo.lamina.raw).toUpperCase() === "L6") {
     showT6RamosPrompt(combo, payload, comboText);
     return;
   }
