@@ -614,6 +614,7 @@ const lastLEl = $("lastLPending");
   let pendingL = null;      // { raw, id }
   let pendingG = null;
   let pendingT6Combo = null;
+  let sendingT6Ramos = false;
 
   const palette = [
     "#FACC15", "#22C55E", "#F97316", "#EF4444",
@@ -1973,7 +1974,9 @@ async function loadLaminaName(lObj) {
 }
 
 function showT6RamosPrompt(combo, payload, comboText) {
+  payload.scan_batch_id = (window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`);
   pendingT6Combo = { combo, payload, comboText };
+  sendingT6Ramos = false;
   suspendAutoFocus = true;
 
   const workerCode = combo.worker.code || combo.worker.raw;
@@ -2001,8 +2004,10 @@ function showT6RamosPrompt(combo, payload, comboText) {
 
 function hideT6RamosPrompt() {
   pendingT6Combo = null;
+  sendingT6Ramos = false;
   if (t6RamosBox) t6RamosBox.classList.remove("active");
   if (t6RamosInput) t6RamosInput.value = "";
+  if (btnT6Ramos) btnT6Ramos.disabled = false;
   suspendAutoFocus = false;
 }
 
@@ -2063,6 +2068,7 @@ async function sendT6ComboPayload(payload, comboText) {
 
 async function submitT6Ramos() {
   if (!pendingT6Combo) return;
+  if (sendingT6Ramos) return;
 
   const cantidad = Number(t6RamosInput?.value || 0);
 
@@ -2074,6 +2080,8 @@ async function submitT6Ramos() {
 
   const { combo, payload, comboText } = pendingT6Combo;
   payload.cantidad_ramos = cantidad;
+  sendingT6Ramos = true;
+  if (btnT6Ramos) btnT6Ramos.disabled = true;
 
   hideT6RamosPrompt();
   clearPendingCombo(combo, comboText, `enviando ${cantidad} ramo(s)...`);

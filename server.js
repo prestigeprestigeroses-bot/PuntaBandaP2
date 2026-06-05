@@ -42,7 +42,15 @@ async function ensureSchema() {
   await pool.query(`
     ALTER TABLE public.scans
     ADD COLUMN IF NOT EXISTS worker_name character varying(120),
-    ADD COLUMN IF NOT EXISTS lamina_nombre character varying(120)
+    ADD COLUMN IF NOT EXISTS lamina_nombre character varying(120),
+    ADD COLUMN IF NOT EXISTS scan_batch_id character varying(80),
+    ADD COLUMN IF NOT EXISTS scan_batch_index integer
+  `);
+
+  await pool.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS scans_batch_unique_idx
+    ON public.scans (scan_batch_id, scan_batch_index)
+    WHERE scan_batch_id IS NOT NULL
   `);
 }
 
@@ -310,11 +318,26 @@ app.get("/api/laminas/:id", async (req, res) => {
    GUARDADO EN DB
    ========================================================== */
 
-async function saveScan(wObj, vObj, gObj, lObj, variedadNombre, laminaNombre, cantidadRamos = 1) {
+async function saveScan(wObj, vObj, gObj, lObj, variedadNombre, laminaNombre, cantidadRamos = 1, scanBatchId = null) {
   const client = await pool.connect();
 
   try {
     const workerName = getWorkerNameSnapshot(wObj.code);
+    const batchId = scanBatchId ? String(scanBatchId).trim().slice(0, 80) : null;
+
+    if (batchId) {
+      const existing = await client.query(
+        `
+        SELECT *
+        FROM scans
+        WHERE scan_batch_id = $1
+        ORDER BY scan_batch_index ASC
+        `,
+        [batchId]
+      );
+
+      if (existing.rows.length) return existing.rows;
+    }
 
     const query = `
       INSERT INTO scans (
@@ -328,9 +351,11 @@ async function saveScan(wObj, vObj, gObj, lObj, variedadNombre, laminaNombre, ca
         raw_a,
         raw_b,
         lamina_id,
-        lamina_nombre
+        lamina_nombre,
+        scan_batch_id,
+        scan_batch_index
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
       RETURNING *
     `;
 
@@ -349,7 +374,9 @@ async function saveScan(wObj, vObj, gObj, lObj, variedadNombre, laminaNombre, ca
         wObj.raw,            // B01-T20
         `${vObj.raw}-${gObj.raw}`, // V01-G60
         lObj.id,             // L1
-        laminaNombre || lObj.id
+        laminaNombre || lObj.id,
+        batchId,
+        batchId ? i + 1 : null
       ];
 
       const result = await client.query(query, values);
@@ -363,6 +390,21 @@ async function saveScan(wObj, vObj, gObj, lObj, variedadNombre, laminaNombre, ca
     try {
       await client.query("ROLLBACK");
     } catch {}
+
+    if (err.code === "23505" && scanBatchId) {
+      const existing = await client.query(
+        `
+        SELECT *
+        FROM scans
+        WHERE scan_batch_id = $1
+        ORDER BY scan_batch_index ASC
+        `,
+        [String(scanBatchId).trim().slice(0, 80)]
+      );
+
+      if (existing.rows.length) return existing.rows;
+    }
+
     throw err;
   } finally {
     client.release();
@@ -436,6 +478,7 @@ app.post("/api/scan", async (req, res) => {
 
     const cantidadRamosRaw = req.body?.cantidad_ramos ?? req.body?.ramos ?? 1;
     const cantidadRamos = Number(cantidadRamosRaw);
+    const scanBatchId = req.body?.scan_batch_id || null;
 
     if (!Number.isInteger(cantidadRamos) || cantidadRamos < 1 || cantidadRamos > 500) {
       return res.status(400).json({
@@ -450,7 +493,8 @@ app.post("/api/scan", async (req, res) => {
       lObj,
       variedadDb.nombre,
       laminaDb.nombre,
-      cantidadRamos
+      cantidadRamos,
+      scanBatchId
     );
 
     const broadcastRows = savedRegs.map((savedReg) => ({
