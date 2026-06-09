@@ -331,6 +331,8 @@
 .btnDeleteScan:hover {
   opacity: .9;
 }
+    .btnGradeScan{width:auto;margin:2px 3px 0 0;padding:5px 8px;border-radius:8px;background:#0e7490;border:1px solid #67e8f9;color:#ecfeff;font-size:11px;font-weight:900}
+    .pendingGrade{display:inline-block;margin-bottom:4px;color:#facc15;font-weight:900}
   
   </style>
 </head>
@@ -586,6 +588,7 @@ const stepGrado = $("stepGrado");
 const stepLamina = $("stepLamina");
 const scanMissingText = $("scanMissingText");
 const t6RamosBox = $("t6RamosBox");
+const t6RamosTitle = t6RamosBox?.querySelector(".t6-ramos-title");
 const t6WorkerInfo = $("t6WorkerInfo");
 const t6RamosInput = $("t6RamosInput");
 const btnT6Ramos = $("btnT6Ramos");
@@ -1459,6 +1462,39 @@ function removeOfflineScan(idLocal) {
   }
 }
 
+async function updateScanGrade(id, grado) {
+  if (!id || !grado) return;
+
+  try {
+    const res = await fetch(`${API}/api/scans/${encodeURIComponent(id)}/grade`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ grado })
+    });
+
+    const data = await res.json().catch(() => ({}));
+
+    if (!res.ok || !data.ok) {
+      lastScanEl.textContent = data.error || "No se pudo actualizar el grado";
+      return;
+    }
+
+    if (data.reg) {
+      const idx = scans.findIndex(r => String(r.id) === String(data.reg.id));
+      if (idx >= 0) scans[idx] = { ...scans[idx], ...data.reg };
+      else scans.unshift(data.reg);
+      rememberCatalogNames([data.reg]);
+    }
+
+    lastScanEl.textContent = `Registro ${id} actualizado a ${grado}`;
+    renderAll();
+
+  } catch (err) {
+    console.error("Error actualizando grado:", err);
+    lastScanEl.textContent = "Error actualizando grado";
+  }
+}
+
   function renderTable() {
   tb.innerHTML = "";
 
@@ -1474,6 +1510,14 @@ function removeOfflineScan(idLocal) {
 
   for (const r of rows) {
     const name = r.worker_name || workerNameMap[String(r.worker || "").trim()] || "";
+    const grado = String(r.grado_cm || "").trim().toUpperCase();
+    const gradeCell = grado === "PENDIENTE"
+      ? `
+        <span class="pendingGrade">PENDIENTE</span><br>
+        <button class="btnGradeScan" data-id="${r.id}" data-grade="G50">G50</button>
+        <button class="btnGradeScan" data-id="${r.id}" data-grade="G60">G60</button>
+      `
+      : escapeHtml(r.grado_cm || "");
 
     const tr = document.createElement("tr");
     tr.innerHTML = `
@@ -1482,7 +1526,7 @@ function removeOfflineScan(idLocal) {
       <td>${name}</td>
       <td>${r.tallos ?? ""}</td>
       <td><span class="pill mono">${r.variedad_nombre ?? r.variedad_id ?? "—"}</span></td>
-      <td>${r.grado_cm || ""}</td>
+      <td>${gradeCell}</td>
       <td><span class="pill mono">${r.lamina_nombre ?? r.lamina_id ?? "—"}</span></td>
       <td>
         <button class="btnDeleteScan" data-id="${r.id}">
@@ -1497,6 +1541,12 @@ function removeOfflineScan(idLocal) {
     btn.addEventListener("click", async () => {
       const id = btn.dataset.id;
       await deleteScan(id);
+    });
+  });
+
+  tb.querySelectorAll(".btnGradeScan").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      await updateScanGrade(btn.dataset.id, btn.dataset.grade);
     });
   });
 
@@ -1840,7 +1890,8 @@ async function loadVariedadName(vObj) {
 
 async function loadLaminaName(lObj) {
   const code = lObj?.id || lObj?.raw;
-  if (!code || laminaNameMap[code]) return;
+  if (!code) return null;
+  if (laminaNameMap[code]) return laminaNameMap[code];
 
   try {
     const res = await fetch(`${API}/api/laminas/${encodeURIComponent(code)}`, { cache: "no-store" });
@@ -1848,8 +1899,11 @@ async function loadLaminaName(lObj) {
     if (res.ok && data?.nombre) {
       laminaNameMap[code] = data.nombre;
       updateScanProgressUI();
+      return data.nombre;
     }
   } catch {}
+
+  return null;
 }
 
   function setLastWorkerUI(txt) {
@@ -1973,15 +2027,23 @@ async function loadLaminaName(lObj) {
   }
 }
 
-function showT6RamosPrompt(combo, payload, comboText) {
+function isBlackLamina(lObj) {
+  const code = String(lObj?.id || lObj?.raw || "").trim().toUpperCase();
+  const name = String(laminaNameMap[code] || "").trim().toUpperCase();
+  return name.includes("NEGRA") || name.includes("NEGRO");
+}
+
+function showT6RamosPrompt(combo, payload, comboText, options = {}) {
   payload.scan_batch_id = (window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`);
   pendingT6Combo = { combo, payload, comboText };
   sendingT6Ramos = false;
   suspendAutoFocus = true;
+  const title = options.title || "PVC: coloque la cantidad de ramos";
 
   const workerCode = combo.worker.code || combo.worker.raw;
   const workerName = String(workerNameMap[workerCode] || "").trim();
   const tallos = Number(combo.worker.tallos || 0);
+  if (t6RamosTitle) t6RamosTitle.textContent = title;
   if (t6WorkerInfo) {
     t6WorkerInfo.textContent = workerName && workerName !== workerCode
       ? `Bonchador: ${workerName} (${workerCode}) - T${tallos}`
@@ -1995,11 +2057,11 @@ function showT6RamosPrompt(combo, payload, comboText) {
   }
 
   if (scanMissingText) {
-    scanMissingText.textContent = `PVC T${tallos}: escriba cuantos ramos fueron y pulse Enviar`;
+    scanMissingText.textContent = options.message || `PVC T${tallos}: escriba cuantos ramos fueron y pulse Enviar`;
     scanMissingText.classList.add("ready");
   }
 
-  lastScanEl.textContent = `${comboText} (faltan ramos PVC T${tallos})`;
+  lastScanEl.textContent = options.lastMessage || `${comboText} (faltan ramos PVC T${tallos})`;
 }
 
 function hideT6RamosPrompt() {
@@ -2090,6 +2152,30 @@ async function submitT6Ramos() {
 }
 
   async function trySendCombo() {
+  if (pendingT6Combo) return;
+
+  if (Number(pendingWorker?.tallos) === 10 && pendingWorker && pendingV && pendingL && !pendingG && isBlackLamina(pendingL)) {
+    const blackCombo = {
+      worker: pendingWorker,
+      variedad: pendingV,
+      grado: null,
+      lamina: pendingL
+    };
+    const blackPayload = {
+      worker: blackCombo.worker.raw,
+      variedad: blackCombo.variedad.raw,
+      grado: "PENDIENTE",
+      lamina: blackCombo.lamina.raw
+    };
+    const blackText = `${blackPayload.worker} / ${blackPayload.variedad} / PENDIENTE / ${blackPayload.lamina}`;
+    showT6RamosPrompt(blackCombo, blackPayload, blackText, {
+      title: "Lamina negra: ramos pendientes de grado",
+      message: "Negra T10: coloque la cantidad total. El grado se asigna despues como G50 o G60",
+      lastMessage: `${blackText} (faltan ramos negra T10)`
+    });
+    return;
+  }
+
   if (!(pendingWorker && pendingV && pendingG && pendingL)) return;
 
   const combo = {
@@ -2237,7 +2323,7 @@ if (isL) {
   pendingL = l;
   setLastLUI(pendingL.raw);
   updateScanProgressUI();
-  loadLaminaName(pendingL);
+  await loadLaminaName(pendingL);
   await trySendCombo();
 }
 }
@@ -2385,6 +2471,14 @@ document.addEventListener("keydown", async (e) => {
         if (msg.kind === "scan" && msg.reg) {
   rememberCatalogNames([msg.reg]);
   addScanIfNotExists(msg.reg);
+  renderFast();
+  return;
+}
+if (msg.kind === "scan_update" && msg.reg) {
+  const idx = scans.findIndex(r => String(r.id) === String(msg.reg.id));
+  if (idx >= 0) scans[idx] = { ...scans[idx], ...msg.reg };
+  else scans.unshift(msg.reg);
+  rememberCatalogNames([msg.reg]);
   renderFast();
   return;
 }

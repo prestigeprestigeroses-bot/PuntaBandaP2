@@ -206,7 +206,7 @@ function parseGrado(code) {
   }
 
   // Grados de texto permitidos
-  const textosPermitidos = ["NACIONAL", "BAJAS"];
+  const textosPermitidos = ["NACIONAL", "BAJAS", "PENDIENTE"];
 
   if (textosPermitidos.includes(up)) {
     return {
@@ -563,6 +563,71 @@ app.delete("/api/scans/:id", async (req, res) => {
     return res.status(500).json({
       ok: false,
       error: "Error eliminando registro"
+    });
+  }
+});
+
+app.patch("/api/scans/:id/grade", async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const gradoObj = parseGrado(req.body?.grado);
+
+    if (!Number.isInteger(id) || id <= 0) {
+      return res.status(400).json({
+        ok: false,
+        error: "ID invalido"
+      });
+    }
+
+    if (!gradoObj || !["50", "60"].includes(String(gradoObj.grado_cm))) {
+      return res.status(400).json({
+        ok: false,
+        error: "Grado invalido. Use G50 o G60"
+      });
+    }
+
+    const result = await pool.query(
+      `
+      UPDATE scans
+      SET
+        grado_cm = $2,
+        raw_b = variedad_id || '-' || $3
+      WHERE id = $1
+      RETURNING *
+      `,
+      [id, gradoObj.grado_cm, gradoObj.raw]
+    );
+
+    if (!result.rows.length) {
+      return res.status(404).json({
+        ok: false,
+        error: "Registro no encontrado"
+      });
+    }
+
+    const row = result.rows[0];
+    const payload = {
+      ...row,
+      variedad_nombre: row.variedad_nombre || row.variedad_id,
+      worker_name: row.worker_name || getWorkerNameSnapshot(row.worker),
+      lamina_nombre: row.lamina_nombre || row.lamina_id,
+    };
+
+    broadcast({
+      kind: "scan_update",
+      reg: payload
+    });
+
+    return res.json({
+      ok: true,
+      reg: payload
+    });
+
+  } catch (err) {
+    console.error("PATCH /api/scans/:id/grade error:", err);
+    return res.status(500).json({
+      ok: false,
+      error: "Error actualizando grado"
     });
   }
 });
