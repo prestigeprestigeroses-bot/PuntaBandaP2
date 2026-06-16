@@ -429,7 +429,7 @@
   </div>
 
   <div id="t6DetailBox" class="t6-detail-box">
-    <div class="t6-detail-title">T6: escanee variedad y grado por ramo</div>
+    <div class="t6-detail-title">T6: escanee variedad por ramo</div>
     <div id="t6DetailInfo" class="t6-detail-info">Bonchador: -</div>
     <div id="t6DetailRows"></div>
     <div class="t6-detail-actions">
@@ -2373,13 +2373,17 @@ async function submitVarietySplit() {
 
 function getT6ActiveRowIndex() {
   if (!pendingT6Detail) return -1;
-  const missing = pendingT6Detail.rows.findIndex((row) => !(row.variedad && row.grado));
-  return missing >= 0 ? missing : pendingT6Detail.rows.length - 1;
+  if (pendingT6Detail.fillAllOnNextVariety) return 0;
+  const nextOverride = pendingT6Detail.rows.findIndex((row) => !row.overridden);
+  return nextOverride >= 0 ? nextOverride : pendingT6Detail.rows.length - 1;
 }
 
 function addT6DetailRow() {
   if (!pendingT6Detail) return;
-  pendingT6Detail.rows.push({ variedad: null, grado: null });
+  pendingT6Detail.rows.push({
+    variedad: pendingT6Detail.defaultVariedad || null,
+    overridden: false
+  });
   renderT6DetailRows();
 }
 
@@ -2388,26 +2392,26 @@ function renderT6DetailRows() {
 
   const activeIndex = getT6ActiveRowIndex();
   t6DetailRows.innerHTML = pendingT6Detail.rows.map((row, idx) => {
-    const complete = row.variedad && row.grado;
+    const complete = !!row.variedad;
     const stateClass = complete ? "ok" : "missing";
     const activeClass = idx === activeIndex ? " active-row" : "";
     const variedadLabel = row.variedad
       ? `${row.variedad}${variedadNameMap[row.variedad] ? " - " + variedadNameMap[row.variedad] : ""}`
       : "Falta variedad";
-    const gradoLabel = row.grado ? row.grado : "Falta grado";
+    const sourceLabel = row.overridden ? "Cambiado" : "G40";
 
     return `
       <div class="t6-detail-row ${stateClass}${activeClass}">
         <span>#${idx + 1}</span>
         <span>${escapeHtml(variedadLabel)}</span>
-        <span>${escapeHtml(gradoLabel)}</span>
+        <span>${escapeHtml(sourceLabel)}</span>
       </div>
     `;
   }).join("");
 
-  const completed = pendingT6Detail.rows.filter((row) => row.variedad && row.grado).length;
+  const completed = pendingT6Detail.rows.filter((row) => row.variedad).length;
   if (scanMissingText) {
-    scanMissingText.textContent = `T6: ${completed}/${pendingT6Detail.rows.length} ramos completos. Escanee variedad y grado.`;
+    scanMissingText.textContent = `T6: ${completed}/${pendingT6Detail.rows.length} ramos con variedad. Grado fijo G40.`;
     scanMissingText.classList.toggle("ready", completed === pendingT6Detail.rows.length);
   }
 }
@@ -2416,7 +2420,9 @@ function showT6DetailPrompt(workerObj) {
   pendingT6Detail = {
     worker: workerObj,
     lamina: { raw: "L6", id: "L6" },
-    rows: Array.from({ length: 5 }, () => ({ variedad: null, grado: null }))
+    defaultVariedad: null,
+    fillAllOnNextVariety: true,
+    rows: Array.from({ length: 5 }, () => ({ variedad: null, overridden: false }))
   };
   sendingT6Detail = false;
 
@@ -2424,8 +2430,8 @@ function showT6DetailPrompt(workerObj) {
   const workerName = String(workerNameMap[workerCode] || "").trim();
   if (t6DetailInfo) {
     t6DetailInfo.textContent = workerName && workerName !== workerCode
-      ? `Bonchador: ${workerName} (${workerCode}) - T6 - PVC L6`
-      : `Bonchador: ${workerCode} - T6 - PVC L6`;
+      ? `Bonchador: ${workerName} (${workerCode}) - T6 - PVC L6 - G40`
+      : `Bonchador: ${workerCode} - T6 - PVC L6 - G40`;
   }
 
   if (t6DetailBox) t6DetailBox.classList.add("active");
@@ -2444,24 +2450,28 @@ function hideT6DetailPrompt() {
 async function handleT6DetailScan({ isV, isG, v, g }) {
   if (!pendingT6Detail) return false;
 
-  if (!isV && !isG) {
-    lastScanEl.textContent = "T6: escanee variedad o grado";
+  if (!isV) {
+    lastScanEl.textContent = "T6: escanee variedad. El grado va fijo en G40";
     return true;
   }
 
-  const idx = getT6ActiveRowIndex();
-  const row = pendingT6Detail.rows[idx];
-  if (!row) return true;
+  loadVariedadName(v);
 
-  if (isV) {
+  if (pendingT6Detail.fillAllOnNextVariety) {
+    pendingT6Detail.defaultVariedad = v.raw;
+    pendingT6Detail.rows.forEach((row) => {
+      row.variedad = v.raw;
+      row.overridden = false;
+    });
+    pendingT6Detail.fillAllOnNextVariety = false;
+    lastScanEl.textContent = `T6: ${v.raw} aplicado a todos los ramos`;
+  } else {
+    const idx = getT6ActiveRowIndex();
+    const row = pendingT6Detail.rows[idx];
+    if (!row) return true;
     row.variedad = v.raw;
-    loadVariedadName(v);
-    lastScanEl.textContent = `Ramo ${idx + 1}: ${v.raw}`;
-  }
-
-  if (isG) {
-    row.grado = g.raw;
-    lastScanEl.textContent = `Ramo ${idx + 1}: ${g.raw}`;
+    row.overridden = true;
+    lastScanEl.textContent = `Ramo ${idx + 1}: cambiado a ${v.raw}`;
   }
 
   renderT6DetailRows();
@@ -2471,7 +2481,7 @@ async function handleT6DetailScan({ isV, isG, v, g }) {
 async function submitT6DetailRows() {
   if (!pendingT6Detail || sendingT6Detail) return;
 
-  const incomplete = pendingT6Detail.rows.findIndex((row) => !(row.variedad && row.grado));
+  const incomplete = pendingT6Detail.rows.findIndex((row) => !row.variedad);
   if (incomplete >= 0) {
     lastScanEl.textContent = `T6: falta completar el ramo #${incomplete + 1}`;
     renderT6DetailRows();
@@ -2486,7 +2496,7 @@ async function submitT6DetailRows() {
 
   const grouped = new Map();
   for (const row of detail.rows) {
-    const key = `${row.variedad}|${row.grado}`;
+    const key = `${row.variedad}|G40`;
     grouped.set(key, (grouped.get(key) || 0) + 1);
   }
 
@@ -2687,7 +2697,6 @@ async function syncOfflineScans() {
   }
 
   if (isB) {
-  if (pendingT6Detail) hideT6DetailPrompt();
   pendingWorker = b;
   setLastWorkerUI(pendingWorker.raw);
   updateScanProgressUI();
