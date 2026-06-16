@@ -39,6 +39,16 @@
     .t6-ramos-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}
     .t6-ramos-actions button{font-size:14px;font-weight:900;padding:10px}
     .t6-ramos-actions button:first-child{background:#16a34a;border-color:#bbf7d0;color:white}
+    .variety-split-box{display:none;gap:8px;width:min(460px,100%);margin:12px auto 0;padding:12px;border:2px solid #a78bfa;border-radius:12px;background:linear-gradient(135deg,#312e81,#0f766e);box-shadow:0 0 0 3px rgba(167,139,250,.14),0 10px 24px rgba(0,0,0,.25)}
+    .variety-split-box.active{display:grid}
+    .variety-split-title{font-size:15px;font-weight:900;color:#f5f3ff;text-align:center;text-transform:uppercase}
+    .variety-split-info{font-size:13px;font-weight:800;text-align:center;color:#ecfeff;background:rgba(15,23,42,.3);border:1px solid rgba(255,255,255,.2);border-radius:10px;padding:7px}
+    .variety-split-row{display:grid;grid-template-columns:1fr 120px 38px;gap:6px;align-items:center}
+    .variety-split-row input{font-size:15px;font-weight:900;text-align:center;padding:9px;background:#f5f3ff;color:#312e81;border:2px solid #c4b5fd}
+    .variety-split-row button{padding:8px;background:#7f1d1d;border-color:#fecaca;color:white}
+    .variety-split-actions{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+    .variety-split-actions button{font-size:13px;font-weight:900;padding:10px}
+    .variety-split-actions button:first-child{background:#16a34a;border-color:#bbf7d0;color:white}
     .okTxt{color:rgba(34,197,94,.95)}
     .warnTxt{color:rgba(255, 0, 0, 0.95)}
     /* =========================
@@ -395,6 +405,17 @@
       <button id="btnT6Cancel" class="ghost" type="button">Cancelar</button>
     </div>
   </div>
+
+  <div id="varietySplitBox" class="variety-split-box">
+    <div class="variety-split-title">PVC: repartir cantidad por variedad</div>
+    <div id="varietySplitInfo" class="variety-split-info">Bonchador: -</div>
+    <div id="varietySplitRows"></div>
+    <div class="variety-split-actions">
+      <button id="btnVarietySplitSend" type="button">Enviar</button>
+      <button id="btnVarietySplitAdd" class="ghost" type="button">Agregar</button>
+      <button id="btnVarietySplitCancel" class="ghost" type="button">Cancelar</button>
+    </div>
+  </div>
 </div>
     <div id="offlineStatus" class="pill mono" style="display:none;"></div>
   </div>
@@ -593,6 +614,12 @@ const t6WorkerInfo = $("t6WorkerInfo");
 const t6RamosInput = $("t6RamosInput");
 const btnT6Ramos = $("btnT6Ramos");
 const btnT6Cancel = $("btnT6Cancel");
+const varietySplitBox = $("varietySplitBox");
+const varietySplitInfo = $("varietySplitInfo");
+const varietySplitRows = $("varietySplitRows");
+const btnVarietySplitSend = $("btnVarietySplitSend");
+const btnVarietySplitAdd = $("btnVarietySplitAdd");
+const btnVarietySplitCancel = $("btnVarietySplitCancel");
 
   const lastWorkerEl = $("lastWorkerForV");
   const lastVEl = $("lastVPending");
@@ -618,6 +645,8 @@ const lastLEl = $("lastLPending");
   let pendingG = null;
   let pendingT6Combo = null;
   let sendingT6Ramos = false;
+  let pendingVarietySplit = null;
+  let sendingVarietySplit = false;
 
   const palette = [
     "#FACC15", "#22C55E", "#F97316", "#EF4444",
@@ -2151,8 +2180,134 @@ async function submitT6Ramos() {
   focusScanInput();
 }
 
+function isPvcLamina(lObj) {
+  return String(lObj?.id || lObj?.raw || "").trim().toUpperCase() === "L6";
+}
+
+function addVarietySplitRow(variedad = "", cantidad = "") {
+  if (!varietySplitRows) return;
+
+  const row = document.createElement("div");
+  row.className = "variety-split-row";
+  row.innerHTML = `
+    <input data-variety-code placeholder="V01" value="${escapeHtml(variedad)}" />
+    <input data-variety-qty type="number" min="1" max="500" step="1" placeholder="Ramos" value="${escapeHtml(cantidad)}" />
+    <button type="button" data-remove-variety-row>×</button>
+  `;
+  varietySplitRows.appendChild(row);
+  row.querySelector("[data-remove-variety-row]")?.addEventListener("click", () => {
+    row.remove();
+  });
+}
+
+function showVarietySplitPrompt(combo, comboText) {
+  pendingVarietySplit = { combo, comboText };
+  sendingVarietySplit = false;
+  suspendAutoFocus = true;
+
+  const workerCode = combo.worker.code || combo.worker.raw;
+  const workerName = String(workerNameMap[workerCode] || "").trim();
+  const tallos = Number(combo.worker.tallos || 0);
+  const grado = combo.grado.grado || combo.grado.raw;
+
+  if (varietySplitInfo) {
+    varietySplitInfo.textContent = workerName && workerName !== workerCode
+      ? `Bonchador: ${workerName} (${workerCode}) - T${tallos} - ${grado}`
+      : `Bonchador: ${workerCode} - T${tallos} - ${grado}`;
+  }
+
+  if (varietySplitRows) {
+    varietySplitRows.innerHTML = "";
+    addVarietySplitRow();
+    addVarietySplitRow();
+    addVarietySplitRow();
+  }
+
+  if (varietySplitBox) varietySplitBox.classList.add("active");
+  if (scanMissingText) {
+    scanMissingText.textContent = "PVC: coloque cantidad por variedad y pulse Enviar";
+    scanMissingText.classList.add("ready");
+  }
+  lastScanEl.textContent = `${comboText} (repartir por variedad)`;
+  varietySplitRows?.querySelector("input[data-variety-code]")?.focus();
+}
+
+function hideVarietySplitPrompt() {
+  pendingVarietySplit = null;
+  sendingVarietySplit = false;
+  if (varietySplitBox) varietySplitBox.classList.remove("active");
+  if (varietySplitRows) varietySplitRows.innerHTML = "";
+  if (btnVarietySplitSend) btnVarietySplitSend.disabled = false;
+  suspendAutoFocus = false;
+}
+
+function readVarietySplitRows() {
+  const rows = [];
+  const elements = varietySplitRows?.querySelectorAll(".variety-split-row") || [];
+
+  for (const row of elements) {
+    const rawVariety = row.querySelector("[data-variety-code]")?.value || "";
+    const rawQty = row.querySelector("[data-variety-qty]")?.value || "";
+    const parsedVariety = parseV(rawVariety);
+    const qty = Number(rawQty);
+
+    if (!rawVariety.trim() && !rawQty.trim()) continue;
+
+    if (!parsedVariety || !Number.isInteger(qty) || qty < 1 || qty > 500) {
+      return { error: "Revise las variedades y cantidades. Use V01, V02... y cantidades mayores a 0" };
+    }
+
+    rows.push({
+      variedad: parsedVariety.raw,
+      cantidad: qty
+    });
+  }
+
+  if (!rows.length) return { error: "Coloque al menos una variedad con cantidad" };
+  return { rows };
+}
+
+async function submitVarietySplit() {
+  if (!pendingVarietySplit) return;
+  if (sendingVarietySplit) return;
+
+  const parsed = readVarietySplitRows();
+  if (parsed.error) {
+    lastScanEl.textContent = parsed.error;
+    return;
+  }
+
+  const { combo, comboText } = pendingVarietySplit;
+  sendingVarietySplit = true;
+  if (btnVarietySplitSend) btnVarietySplitSend.disabled = true;
+
+  hideVarietySplitPrompt();
+  clearPendingCombo(combo, comboText, "enviando reparto por variedad...");
+
+  let total = 0;
+
+  for (const item of parsed.rows) {
+    const payload = {
+      worker: combo.worker.raw,
+      variedad: item.variedad,
+      grado: combo.grado.raw,
+      lamina: combo.lamina.raw,
+      cantidad_ramos: item.cantidad,
+      scan_batch_id: (window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`)
+    };
+
+    const text = `${payload.worker} / ${payload.variedad} / ${payload.grado} / ${payload.lamina}`;
+    await sendT6ComboPayload(payload, text);
+    total += item.cantidad;
+  }
+
+  lastScanEl.textContent = `${comboText} (${total} ramo(s) repartidos por variedad)`;
+  renderAll();
+  focusScanInput();
+}
+
   async function trySendCombo() {
-  if (pendingT6Combo) return;
+  if (pendingT6Combo || pendingVarietySplit) return;
 
   if (Number(pendingWorker?.tallos) === 10 && pendingWorker && pendingV && pendingL && !pendingG && isBlackLamina(pendingL)) {
     const blackCombo = {
@@ -2173,6 +2328,25 @@ async function submitT6Ramos() {
       message: "Negra T10: coloque la cantidad total. El grado se asigna despues como G50 o G60",
       lastMessage: `${blackText} (faltan ramos negra T10)`
     });
+    return;
+  }
+
+  if (
+    pendingWorker &&
+    pendingG &&
+    pendingL &&
+    !pendingV &&
+    [6, 10, 12].includes(Number(pendingWorker.tallos)) &&
+    isPvcLamina(pendingL)
+  ) {
+    const splitCombo = {
+      worker: pendingWorker,
+      variedad: null,
+      grado: pendingG,
+      lamina: pendingL
+    };
+    const splitText = `${pendingWorker.raw} / VARIEDADES / ${pendingG.raw} / ${pendingL.raw}`;
+    showVarietySplitPrompt(splitCombo, splitText);
     return;
   }
 
@@ -2415,6 +2589,13 @@ document.addEventListener("keydown", async (e) => {
     if (e.key !== "Enter") return;
     e.preventDefault();
     await submitT6Ramos();
+  });
+  btnVarietySplitSend?.addEventListener("click", submitVarietySplit);
+  btnVarietySplitAdd?.addEventListener("click", () => addVarietySplitRow());
+  btnVarietySplitCancel?.addEventListener("click", () => {
+    hideVarietySplitPrompt();
+    limpiarEscaneoPendiente("Reparto por variedad cancelado");
+    focusScanInput();
   });
 
   let pollTimer = null;
