@@ -49,6 +49,17 @@
     .variety-split-actions{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
     .variety-split-actions button{font-size:13px;font-weight:900;padding:10px}
     .variety-split-actions button:first-child{background:#16a34a;border-color:#bbf7d0;color:white}
+    .t6-detail-box{display:none;gap:8px;width:min(560px,100%);margin:12px auto 0;padding:12px;border:2px solid #22c55e;border-radius:12px;background:linear-gradient(135deg,#064e3b,#0f766e);box-shadow:0 0 0 3px rgba(34,197,94,.14),0 10px 24px rgba(0,0,0,.25)}
+    .t6-detail-box.active{display:grid}
+    .t6-detail-title{font-size:15px;font-weight:900;color:#ecfdf5;text-align:center;text-transform:uppercase}
+    .t6-detail-info{font-size:13px;font-weight:800;text-align:center;color:#ecfeff;background:rgba(15,23,42,.3);border:1px solid rgba(255,255,255,.2);border-radius:10px;padding:7px}
+    .t6-detail-row{display:grid;grid-template-columns:44px 1fr 1fr;gap:6px;align-items:center;border-radius:10px;padding:7px;border:1px solid rgba(255,255,255,.22);font-size:13px;font-weight:900}
+    .t6-detail-row.ok{background:rgba(22,163,74,.35);border-color:#86efac;color:#ecfdf5}
+    .t6-detail-row.missing{background:rgba(127,29,29,.42);border-color:#fca5a5;color:#fee2e2}
+    .t6-detail-row.active-row{box-shadow:0 0 0 2px rgba(250,204,21,.7)}
+    .t6-detail-actions{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+    .t6-detail-actions button{font-size:13px;font-weight:900;padding:10px}
+    .t6-detail-actions button:first-child{background:#16a34a;border-color:#bbf7d0;color:white}
     .okTxt{color:rgba(34,197,94,.95)}
     .warnTxt{color:rgba(255, 0, 0, 0.95)}
     /* =========================
@@ -416,6 +427,17 @@
       <button id="btnVarietySplitCancel" class="ghost" type="button">Cancelar</button>
     </div>
   </div>
+
+  <div id="t6DetailBox" class="t6-detail-box">
+    <div class="t6-detail-title">T6: escanee variedad y grado por ramo</div>
+    <div id="t6DetailInfo" class="t6-detail-info">Bonchador: -</div>
+    <div id="t6DetailRows"></div>
+    <div class="t6-detail-actions">
+      <button id="btnT6DetailSend" type="button">Enviar</button>
+      <button id="btnT6DetailAdd" class="ghost" type="button">Agregar ramo</button>
+      <button id="btnT6DetailCancel" class="ghost" type="button">Cancelar</button>
+    </div>
+  </div>
 </div>
     <div id="offlineStatus" class="pill mono" style="display:none;"></div>
   </div>
@@ -620,6 +642,12 @@ const varietySplitRows = $("varietySplitRows");
 const btnVarietySplitSend = $("btnVarietySplitSend");
 const btnVarietySplitAdd = $("btnVarietySplitAdd");
 const btnVarietySplitCancel = $("btnVarietySplitCancel");
+const t6DetailBox = $("t6DetailBox");
+const t6DetailInfo = $("t6DetailInfo");
+const t6DetailRows = $("t6DetailRows");
+const btnT6DetailSend = $("btnT6DetailSend");
+const btnT6DetailAdd = $("btnT6DetailAdd");
+const btnT6DetailCancel = $("btnT6DetailCancel");
 
   const lastWorkerEl = $("lastWorkerForV");
   const lastVEl = $("lastVPending");
@@ -648,6 +676,8 @@ const lastLEl = $("lastLPending");
   let sendingT6Ramos = false;
   let pendingVarietySplit = null;
   let sendingVarietySplit = false;
+  let pendingT6Detail = null;
+  let sendingT6Detail = false;
 
   const palette = [
     "#FACC15", "#22C55E", "#F97316", "#EF4444",
@@ -2341,8 +2371,156 @@ async function submitVarietySplit() {
   focusScanInput();
 }
 
+function getT6ActiveRowIndex() {
+  if (!pendingT6Detail) return -1;
+  const missing = pendingT6Detail.rows.findIndex((row) => !(row.variedad && row.grado));
+  return missing >= 0 ? missing : pendingT6Detail.rows.length - 1;
+}
+
+function addT6DetailRow() {
+  if (!pendingT6Detail) return;
+  pendingT6Detail.rows.push({ variedad: null, grado: null });
+  renderT6DetailRows();
+}
+
+function renderT6DetailRows() {
+  if (!pendingT6Detail || !t6DetailRows) return;
+
+  const activeIndex = getT6ActiveRowIndex();
+  t6DetailRows.innerHTML = pendingT6Detail.rows.map((row, idx) => {
+    const complete = row.variedad && row.grado;
+    const stateClass = complete ? "ok" : "missing";
+    const activeClass = idx === activeIndex ? " active-row" : "";
+    const variedadLabel = row.variedad
+      ? `${row.variedad}${variedadNameMap[row.variedad] ? " - " + variedadNameMap[row.variedad] : ""}`
+      : "Falta variedad";
+    const gradoLabel = row.grado ? row.grado : "Falta grado";
+
+    return `
+      <div class="t6-detail-row ${stateClass}${activeClass}">
+        <span>#${idx + 1}</span>
+        <span>${escapeHtml(variedadLabel)}</span>
+        <span>${escapeHtml(gradoLabel)}</span>
+      </div>
+    `;
+  }).join("");
+
+  const completed = pendingT6Detail.rows.filter((row) => row.variedad && row.grado).length;
+  if (scanMissingText) {
+    scanMissingText.textContent = `T6: ${completed}/${pendingT6Detail.rows.length} ramos completos. Escanee variedad y grado.`;
+    scanMissingText.classList.toggle("ready", completed === pendingT6Detail.rows.length);
+  }
+}
+
+function showT6DetailPrompt(workerObj) {
+  pendingT6Detail = {
+    worker: workerObj,
+    lamina: { raw: "L6", id: "L6" },
+    rows: Array.from({ length: 5 }, () => ({ variedad: null, grado: null }))
+  };
+  sendingT6Detail = false;
+
+  const workerCode = workerObj.code || workerObj.raw;
+  const workerName = String(workerNameMap[workerCode] || "").trim();
+  if (t6DetailInfo) {
+    t6DetailInfo.textContent = workerName && workerName !== workerCode
+      ? `Bonchador: ${workerName} (${workerCode}) - T6 - PVC L6`
+      : `Bonchador: ${workerCode} - T6 - PVC L6`;
+  }
+
+  if (t6DetailBox) t6DetailBox.classList.add("active");
+  renderT6DetailRows();
+  lastScanEl.textContent = `${workerObj.raw} (modo T6 por ramo)`;
+}
+
+function hideT6DetailPrompt() {
+  pendingT6Detail = null;
+  sendingT6Detail = false;
+  if (t6DetailBox) t6DetailBox.classList.remove("active");
+  if (t6DetailRows) t6DetailRows.innerHTML = "";
+  if (btnT6DetailSend) btnT6DetailSend.disabled = false;
+}
+
+async function handleT6DetailScan({ isV, isG, v, g }) {
+  if (!pendingT6Detail) return false;
+
+  if (!isV && !isG) {
+    lastScanEl.textContent = "T6: escanee variedad o grado";
+    return true;
+  }
+
+  const idx = getT6ActiveRowIndex();
+  const row = pendingT6Detail.rows[idx];
+  if (!row) return true;
+
+  if (isV) {
+    row.variedad = v.raw;
+    loadVariedadName(v);
+    lastScanEl.textContent = `Ramo ${idx + 1}: ${v.raw}`;
+  }
+
+  if (isG) {
+    row.grado = g.raw;
+    lastScanEl.textContent = `Ramo ${idx + 1}: ${g.raw}`;
+  }
+
+  renderT6DetailRows();
+  return true;
+}
+
+async function submitT6DetailRows() {
+  if (!pendingT6Detail || sendingT6Detail) return;
+
+  const incomplete = pendingT6Detail.rows.findIndex((row) => !(row.variedad && row.grado));
+  if (incomplete >= 0) {
+    lastScanEl.textContent = `T6: falta completar el ramo #${incomplete + 1}`;
+    renderT6DetailRows();
+    return;
+  }
+
+  sendingT6Detail = true;
+  if (btnT6DetailSend) btnT6DetailSend.disabled = true;
+
+  const detail = pendingT6Detail;
+  hideT6DetailPrompt();
+
+  const grouped = new Map();
+  for (const row of detail.rows) {
+    const key = `${row.variedad}|${row.grado}`;
+    grouped.set(key, (grouped.get(key) || 0) + 1);
+  }
+
+  for (const [key, cantidad] of grouped.entries()) {
+    const [variedad, grado] = key.split("|");
+    const payload = {
+      worker: detail.worker.raw,
+      variedad,
+      grado,
+      lamina: detail.lamina.raw,
+      cantidad_ramos: cantidad,
+      scan_batch_id: (window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`)
+    };
+    const text = `${payload.worker} / ${payload.variedad} / ${payload.grado} / ${payload.lamina}`;
+    await sendT6ComboPayload(payload, text);
+  }
+
+  pendingWorker = null;
+  pendingV = null;
+  pendingG = null;
+  pendingL = null;
+  setLastWorkerUI(null);
+  setLastVUI(null);
+  setLastGUI(null);
+  setLastLUI(null);
+  updateScanProgressUI();
+
+  lastScanEl.textContent = `${detail.worker.raw} (${detail.rows.length} ramo(s) T6 registrados)`;
+  renderAll();
+  focusScanInput();
+}
+
   async function trySendCombo() {
-  if (pendingT6Combo || pendingVarietySplit) return;
+  if (pendingT6Combo || pendingVarietySplit || pendingT6Detail) return;
 
   if (Number(pendingWorker?.tallos) === 10 && pendingWorker && pendingV && pendingL && !pendingG && isBlackLamina(pendingL)) {
     const blackCombo = {
@@ -2503,10 +2681,27 @@ async function syncOfflineScans() {
     return;
   }
 
+  if (pendingT6Detail && !isB) {
+    await handleT6DetailScan({ isV, isG, v, g });
+    return;
+  }
+
   if (isB) {
+  if (pendingT6Detail) hideT6DetailPrompt();
   pendingWorker = b;
   setLastWorkerUI(pendingWorker.raw);
   updateScanProgressUI();
+  if (Number(pendingWorker.tallos) === 6) {
+    pendingV = null;
+    pendingG = null;
+    pendingL = null;
+    setLastVUI(null);
+    setLastGUI(null);
+    setLastLUI(null);
+    updateScanProgressUI();
+    showT6DetailPrompt(pendingWorker);
+    return;
+  }
   await trySendCombo();
   return;
 }
@@ -2630,6 +2825,13 @@ document.addEventListener("keydown", async (e) => {
   btnVarietySplitCancel?.addEventListener("click", () => {
     hideVarietySplitPrompt();
     limpiarEscaneoPendiente("Reparto por variedad cancelado");
+    focusScanInput();
+  });
+  btnT6DetailSend?.addEventListener("click", submitT6DetailRows);
+  btnT6DetailAdd?.addEventListener("click", addT6DetailRow);
+  btnT6DetailCancel?.addEventListener("click", () => {
+    hideT6DetailPrompt();
+    limpiarEscaneoPendiente("Modo T6 cancelado");
     focusScanInput();
   });
 
