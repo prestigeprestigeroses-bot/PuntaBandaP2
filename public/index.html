@@ -53,10 +53,11 @@
     .t6-detail-box.active{display:grid}
     .t6-detail-title{font-size:15px;font-weight:900;color:#ecfdf5;text-align:center;text-transform:uppercase}
     .t6-detail-info{font-size:13px;font-weight:800;text-align:center;color:#ecfeff;background:rgba(15,23,42,.3);border:1px solid rgba(255,255,255,.2);border-radius:10px;padding:7px}
-    .t6-detail-row{display:grid;grid-template-columns:44px 1fr 1fr;gap:6px;align-items:center;border-radius:10px;padding:7px;border:1px solid rgba(255,255,255,.22);font-size:13px;font-weight:900}
+    .t6-detail-row{display:grid;grid-template-columns:44px 1fr 1fr;gap:6px;align-items:center;border-radius:10px;padding:7px;border:1px solid rgba(255,255,255,.22);font-size:13px;font-weight:900;cursor:pointer}
     .t6-detail-row.ok{background:rgba(22,163,74,.35);border-color:#86efac;color:#ecfdf5}
     .t6-detail-row.missing{background:rgba(127,29,29,.42);border-color:#fca5a5;color:#fee2e2}
     .t6-detail-row.active-row{box-shadow:0 0 0 2px rgba(250,204,21,.7)}
+    .t6-detail-row:hover{filter:brightness(1.12)}
     .t6-detail-actions{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
     .t6-detail-actions button{font-size:13px;font-weight:900;padding:10px}
     .t6-detail-actions button:first-child{background:#16a34a;border-color:#bbf7d0;color:white}
@@ -2373,16 +2374,19 @@ async function submitVarietySplit() {
 
 function getT6ActiveRowIndex() {
   if (!pendingT6Detail) return -1;
-  if (pendingT6Detail.fillAllOnNextVariety) return 0;
-  const nextOverride = pendingT6Detail.rows.findIndex((row) => !row.overridden);
-  return nextOverride >= 0 ? nextOverride : pendingT6Detail.rows.length - 1;
+  return Math.min(
+    Math.max(Number(pendingT6Detail.activeIndex || 0), 0),
+    Math.max(pendingT6Detail.rows.length - 1, 0)
+  );
 }
 
 function addT6DetailRow() {
   if (!pendingT6Detail) return;
+  const lastRow = pendingT6Detail.rows[pendingT6Detail.rows.length - 1] || {};
+  const inheritedVariedad = lastRow.variedad || pendingT6Detail.defaultVariedad || null;
   pendingT6Detail.rows.push({
-    variedad: pendingT6Detail.defaultVariedad || null,
-    overridden: false
+    variedad: inheritedVariedad,
+    overridden: !!inheritedVariedad && inheritedVariedad !== pendingT6Detail.defaultVariedad
   });
   renderT6DetailRows();
 }
@@ -2401,7 +2405,7 @@ function renderT6DetailRows() {
     const sourceLabel = row.overridden ? "Cambiado" : "G40";
 
     return `
-      <div class="t6-detail-row ${stateClass}${activeClass}">
+      <div class="t6-detail-row ${stateClass}${activeClass}" data-t6-row-index="${idx}" title="Aplicar la proxima variedad desde este ramo">
         <span>#${idx + 1}</span>
         <span>${escapeHtml(variedadLabel)}</span>
         <span>${escapeHtml(sourceLabel)}</span>
@@ -2409,9 +2413,17 @@ function renderT6DetailRows() {
     `;
   }).join("");
 
+  t6DetailRows.querySelectorAll("[data-t6-row-index]").forEach((el) => {
+    el.addEventListener("click", () => {
+      pendingT6Detail.activeIndex = Number(el.dataset.t6RowIndex || 0);
+      lastScanEl.textContent = `T6: la proxima variedad cambia desde el ramo #${pendingT6Detail.activeIndex + 1}`;
+      renderT6DetailRows();
+    });
+  });
+
   const completed = pendingT6Detail.rows.filter((row) => row.variedad).length;
   if (scanMissingText) {
-    scanMissingText.textContent = `T6: ${completed}/${pendingT6Detail.rows.length} ramos con variedad. Grado fijo G40.`;
+    scanMissingText.textContent = `T6: ${completed}/${pendingT6Detail.rows.length} ramos. Escanee variedad; toca una fila para cambiar desde ahi. G40 fijo.`;
     scanMissingText.classList.toggle("ready", completed === pendingT6Detail.rows.length);
   }
 }
@@ -2421,7 +2433,7 @@ function showT6DetailPrompt(workerObj) {
     worker: workerObj,
     lamina: { raw: "L6", id: "L6" },
     defaultVariedad: null,
-    fillAllOnNextVariety: true,
+    activeIndex: 0,
     rows: Array.from({ length: 5 }, () => ({ variedad: null, overridden: false }))
   };
   sendingT6Detail = false;
@@ -2457,22 +2469,21 @@ async function handleT6DetailScan({ isV, isG, v, g }) {
 
   loadVariedadName(v);
 
-  if (pendingT6Detail.fillAllOnNextVariety) {
+  const idx = getT6ActiveRowIndex();
+  const isFirstApply = !pendingT6Detail.defaultVariedad;
+
+  if (isFirstApply) {
     pendingT6Detail.defaultVariedad = v.raw;
-    pendingT6Detail.rows.forEach((row) => {
-      row.variedad = v.raw;
-      row.overridden = false;
-    });
-    pendingT6Detail.fillAllOnNextVariety = false;
-    lastScanEl.textContent = `T6: ${v.raw} aplicado a todos los ramos`;
-  } else {
-    const idx = getT6ActiveRowIndex();
-    const row = pendingT6Detail.rows[idx];
-    if (!row) return true;
-    row.variedad = v.raw;
-    row.overridden = true;
-    lastScanEl.textContent = `Ramo ${idx + 1}: cambiado a ${v.raw}`;
   }
+
+  for (let i = idx; i < pendingT6Detail.rows.length; i++) {
+    const row = pendingT6Detail.rows[i];
+    row.variedad = v.raw;
+    row.overridden = !isFirstApply;
+  }
+
+  pendingT6Detail.activeIndex = Math.min(idx + 1, pendingT6Detail.rows.length - 1);
+  lastScanEl.textContent = `T6: ${v.raw} aplicado desde el ramo #${idx + 1}`;
 
   renderT6DetailRows();
   return true;
