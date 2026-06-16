@@ -268,6 +268,23 @@ async function getLaminaActiva(laminaId) {
   return result.rows[0];
 }
 
+app.get("/api/variedades", async (req, res) => {
+  try {
+    const result = await pool.query(
+      `
+      SELECT id, nombre
+      FROM variedades
+      ORDER BY id ASC
+      `
+    );
+
+    res.json(result.rows);
+  } catch (err) {
+    console.error("GET /api/variedades error:", err);
+    res.status(500).json({ error: "Error en DB" });
+  }
+});
+
 app.get("/api/variedades/:id", async (req, res) => {
   try {
     const vObj = parseVariedad(req.params.id);

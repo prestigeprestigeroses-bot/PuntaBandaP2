@@ -634,6 +634,7 @@ const lastLEl = $("lastLPending");
   let workers = ["B01","B02","B03","B04","B05","B06","B07","B08","B09","B10","B11","B12"];
   let workerNameMap = {};
   let variedadNameMap = {};
+  let variedadCatalog = [];
   let laminaNameMap = {};
   let scans = [];
   let pendingAll = {};
@@ -1775,6 +1776,39 @@ function rememberCatalogNames(rows = scans) {
     renderAll();
   }
 
+async function loadVariedadesCatalog() {
+  if (variedadCatalog.length) return variedadCatalog;
+
+  const res = await fetch(API + "/api/variedades", { cache: "no-store" }).catch(() => null);
+  if (!res || !res.ok) return variedadCatalog;
+
+  const arr = await res.json().catch(() => []);
+  variedadCatalog = Array.isArray(arr)
+    ? arr.map((v) => ({
+        id: String(v.id || "").trim().toUpperCase(),
+        nombre: String(v.nombre || "").trim()
+      })).filter((v) => v.id)
+    : [];
+
+  for (const v of variedadCatalog) {
+    if (v.nombre) variedadNameMap[v.id] = v.nombre;
+  }
+
+  return variedadCatalog;
+}
+
+function renderVarietyOptions(selected = "") {
+  const current = String(selected || "").trim().toUpperCase();
+  const options = [`<option value="">Seleccione variedad</option>`];
+
+  for (const v of variedadCatalog) {
+    const label = v.nombre ? `${v.id} - ${v.nombre}` : v.id;
+    options.push(`<option value="${escapeHtml(v.id)}"${v.id === current ? " selected" : ""}>${escapeHtml(label)}</option>`);
+  }
+
+  return options.join("");
+}
+
   function parseBonchador(code) {
   const up = String(code || "").trim().toUpperCase();
   const m = up.match(/^B(\d{1,2})-T(\d{1,3})$/);
@@ -2190,7 +2224,7 @@ function addVarietySplitRow(variedad = "", cantidad = "") {
   const row = document.createElement("div");
   row.className = "variety-split-row";
   row.innerHTML = `
-    <input data-variety-code placeholder="V01" value="${escapeHtml(variedad)}" />
+    <select data-variety-code>${renderVarietyOptions(variedad)}</select>
     <input data-variety-qty type="number" min="1" max="500" step="1" placeholder="Ramos" value="${escapeHtml(cantidad)}" />
     <button type="button" data-remove-variety-row>×</button>
   `;
@@ -2200,10 +2234,11 @@ function addVarietySplitRow(variedad = "", cantidad = "") {
   });
 }
 
-function showVarietySplitPrompt(combo, comboText) {
+async function showVarietySplitPrompt(combo, comboText) {
   pendingVarietySplit = { combo, comboText };
   sendingVarietySplit = false;
   suspendAutoFocus = true;
+  await loadVariedadesCatalog();
 
   const workerCode = combo.worker.code || combo.worker.raw;
   const workerName = String(workerNameMap[workerCode] || "").trim();
@@ -2229,7 +2264,7 @@ function showVarietySplitPrompt(combo, comboText) {
     scanMissingText.classList.add("ready");
   }
   lastScanEl.textContent = `${comboText} (repartir por variedad)`;
-  varietySplitRows?.querySelector("input[data-variety-code]")?.focus();
+  varietySplitRows?.querySelector("[data-variety-code]")?.focus();
 }
 
 function hideVarietySplitPrompt() {
@@ -2254,7 +2289,7 @@ function readVarietySplitRows() {
     if (!rawVariety.trim() && !rawQty.trim()) continue;
 
     if (!parsedVariety || !Number.isInteger(qty) || qty < 1 || qty > 500) {
-      return { error: "Revise las variedades y cantidades. Use V01, V02... y cantidades mayores a 0" };
+      return { error: "Seleccione variedad y coloque cantidades mayores a 0" };
     }
 
     rows.push({
@@ -2346,7 +2381,7 @@ async function submitVarietySplit() {
       lamina: pendingL
     };
     const splitText = `${pendingWorker.raw} / VARIEDADES / ${pendingG.raw} / ${pendingL.raw}`;
-    showVarietySplitPrompt(splitCombo, splitText);
+    await showVarietySplitPrompt(splitCombo, splitText);
     return;
   }
 
