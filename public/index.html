@@ -62,6 +62,19 @@
     .t6-detail-actions{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
     .t6-detail-actions button{font-size:13px;font-weight:900;padding:10px}
     .t6-detail-actions button:first-child{background:#16a34a;border-color:#bbf7d0;color:white}
+    .mixed-batch-box{display:none;gap:8px;width:min(720px,100%);margin:12px auto 0;padding:12px;border:2px solid #f59e0b;border-radius:12px;background:linear-gradient(135deg,#431407,#0f172a);box-shadow:0 0 0 3px rgba(245,158,11,.15),0 10px 24px rgba(0,0,0,.25)}
+    .mixed-batch-box.active{display:grid}
+    .mixed-title{font-size:15px;font-weight:900;color:#fffbeb;text-align:center;text-transform:uppercase}
+    .mixed-context{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;font-size:12px;font-weight:900;color:#fffbeb}
+    .mixed-context span{background:rgba(15,23,42,.45);border:1px solid rgba(255,255,255,.18);border-radius:9px;padding:7px;text-align:center}
+    .mixed-row{display:grid;grid-template-columns:42px 1fr 1fr 1fr 1fr 34px;gap:6px;align-items:center;border-radius:10px;padding:7px;border:1px solid rgba(255,255,255,.22);font-size:12px;font-weight:900;cursor:pointer}
+    .mixed-row.ok{background:rgba(22,163,74,.35);border-color:#86efac;color:#ecfdf5}
+    .mixed-row.missing{background:rgba(127,29,29,.42);border-color:#fca5a5;color:#fee2e2}
+    .mixed-row.active-row{background:linear-gradient(135deg,#16a34a,#22c55e);border-color:#bbf7d0;color:#052e16;box-shadow:0 0 0 3px rgba(34,197,94,.42),0 0 18px rgba(34,197,94,.55)}
+    .mixed-row button{padding:5px 7px;border-radius:8px;background:#7f1d1d;border:1px solid #fecaca;color:#fff;font-size:12px;font-weight:900}
+    .mixed-actions{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+    .mixed-actions button{font-size:13px;font-weight:900;padding:10px}
+    .mixed-actions button:first-child{background:#16a34a;border-color:#bbf7d0;color:white}
     .okTxt{color:rgba(34,197,94,.95)}
     .warnTxt{color:rgba(255, 0, 0, 0.95)}
     /* =========================
@@ -440,6 +453,22 @@
       <button id="btnT6DetailCancel" class="ghost" type="button">Cancelar</button>
     </div>
   </div>
+
+  <div id="mixedBatchBox" class="mixed-batch-box">
+    <div class="mixed-title">Modo lote mixto</div>
+    <div id="mixedContext" class="mixed-context">
+      <span>Bonchador: -</span>
+      <span>Variedad: -</span>
+      <span>Grado: -</span>
+      <span>Lamina: -</span>
+    </div>
+    <div id="mixedRows"></div>
+    <div class="mixed-actions">
+      <button id="btnMixedSend" type="button">Enviar lote</button>
+      <button id="btnMixedAdd" class="ghost" type="button">Agregar fila</button>
+      <button id="btnMixedCancel" class="ghost" type="button">Cancelar</button>
+    </div>
+  </div>
 </div>
     <div id="offlineStatus" class="pill mono" style="display:none;"></div>
   </div>
@@ -571,6 +600,10 @@ Código 4 (lámina): <span class="mono">L1</span><br><br>
             Conectar lector USB (Serial)
           </button>
         </div>
+
+        <button id="btnMixedMode" class="ghost" type="button" style="margin-top:8px;">
+          Activar lote mixto
+        </button>
       </div>
 
       <label style="margin-top:12px;">Nombres de bonchadores</label>
@@ -650,6 +683,13 @@ const t6DetailRows = $("t6DetailRows");
 const btnT6DetailSend = $("btnT6DetailSend");
 const btnT6DetailAdd = $("btnT6DetailAdd");
 const btnT6DetailCancel = $("btnT6DetailCancel");
+const mixedBatchBox = $("mixedBatchBox");
+const mixedContext = $("mixedContext");
+const mixedRows = $("mixedRows");
+const btnMixedMode = $("btnMixedMode");
+const btnMixedSend = $("btnMixedSend");
+const btnMixedAdd = $("btnMixedAdd");
+const btnMixedCancel = $("btnMixedCancel");
 
   const lastWorkerEl = $("lastWorkerForV");
   const lastVEl = $("lastVPending");
@@ -680,6 +720,8 @@ const lastLEl = $("lastLPending");
   let sendingVarietySplit = false;
   let pendingT6Detail = null;
   let sendingT6Detail = false;
+  let mixedBatch = null;
+  let sendingMixedBatch = false;
 
   const palette = [
     "#FACC15", "#22C55E", "#F97316", "#EF4444",
@@ -2558,8 +2600,190 @@ async function submitT6DetailRows() {
   focusScanInput();
 }
 
+function createMixedRowFromContext() {
+  return {
+    worker: mixedBatch?.context.worker || null,
+    variedad: mixedBatch?.context.variedad || null,
+    grado: mixedBatch?.context.grado || null,
+    lamina: mixedBatch?.context.lamina || null
+  };
+}
+
+function isMixedRowComplete(row) {
+  return !!(row.worker && row.variedad && row.grado && row.lamina);
+}
+
+function getMixedActiveIndex() {
+  if (!mixedBatch) return -1;
+  const current = Number(mixedBatch.activeIndex || 0);
+  return Math.min(Math.max(current, 0), Math.max(mixedBatch.rows.length - 1, 0));
+}
+
+function addMixedRow() {
+  if (!mixedBatch) return;
+  mixedBatch.rows.push(createMixedRowFromContext());
+  mixedBatch.activeIndex = mixedBatch.rows.length - 1;
+  renderMixedBatch();
+}
+
+function renderMixedBatch() {
+  if (!mixedBatch || !mixedRows) return;
+
+  const ctx = mixedBatch.context;
+  if (mixedContext) {
+    mixedContext.innerHTML = `
+      <span>Bonchador: ${escapeHtml(ctx.worker?.raw || "-")}</span>
+      <span>Variedad: ${escapeHtml(ctx.variedad?.raw || "-")}</span>
+      <span>Grado: ${escapeHtml(ctx.grado?.raw || "-")}</span>
+      <span>Lamina: ${escapeHtml(ctx.lamina?.raw || "-")}</span>
+    `;
+  }
+
+  const activeIndex = getMixedActiveIndex();
+  mixedRows.innerHTML = mixedBatch.rows.map((row, idx) => {
+    const complete = isMixedRowComplete(row);
+    const stateClass = complete ? "ok" : "missing";
+    const activeClass = idx === activeIndex ? " active-row" : "";
+    return `
+      <div class="mixed-row ${stateClass}${activeClass}" data-mixed-row-index="${idx}" title="Seleccionar fila para corregir">
+        <span>#${idx + 1}</span>
+        <span>${escapeHtml(row.worker?.raw || "Falta B")}</span>
+        <span>${escapeHtml(row.variedad?.raw || "Falta V")}</span>
+        <span>${escapeHtml(row.grado?.raw || "Falta G")}</span>
+        <span>${escapeHtml(row.lamina?.raw || "Falta L")}</span>
+        <button type="button" data-mixed-delete-index="${idx}">X</button>
+      </div>
+    `;
+  }).join("");
+
+  mixedRows.querySelectorAll("[data-mixed-row-index]").forEach((el) => {
+    el.addEventListener("click", () => {
+      mixedBatch.activeIndex = Number(el.dataset.mixedRowIndex || 0);
+      lastScanEl.textContent = `Lote mixto: editando fila #${mixedBatch.activeIndex + 1}`;
+      renderMixedBatch();
+    });
+  });
+
+  mixedRows.querySelectorAll("[data-mixed-delete-index]").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const idx = Number(btn.dataset.mixedDeleteIndex || -1);
+      if (idx < 0 || mixedBatch.rows.length <= 1) return;
+      mixedBatch.rows.splice(idx, 1);
+      mixedBatch.activeIndex = Math.min(getMixedActiveIndex(), mixedBatch.rows.length - 1);
+      lastScanEl.textContent = `Lote mixto: fila #${idx + 1} eliminada`;
+      renderMixedBatch();
+    });
+  });
+
+  const completed = mixedBatch.rows.filter(isMixedRowComplete).length;
+  if (scanMissingText) {
+    scanMissingText.textContent = `Lote mixto: ${completed}/${mixedBatch.rows.length} filas completas. Escanee B, V, G o L.`;
+    scanMissingText.classList.toggle("ready", completed === mixedBatch.rows.length);
+  }
+}
+
+function showMixedBatch() {
+  mixedBatch = {
+    context: { worker: null, variedad: null, grado: null, lamina: null },
+    activeIndex: 0,
+    rows: Array.from({ length: 5 }, () => ({ worker: null, variedad: null, grado: null, lamina: null }))
+  };
+  sendingMixedBatch = false;
+  if (mixedBatchBox) mixedBatchBox.classList.add("active");
+  renderMixedBatch();
+  lastScanEl.textContent = "Modo lote mixto activo";
+}
+
+function hideMixedBatch() {
+  mixedBatch = null;
+  sendingMixedBatch = false;
+  if (mixedBatchBox) mixedBatchBox.classList.remove("active");
+  if (mixedRows) mixedRows.innerHTML = "";
+  if (btnMixedSend) btnMixedSend.disabled = false;
+}
+
+async function handleMixedBatchScan({ isB, isV, isG, isL, b, v, g, l }) {
+  if (!mixedBatch) return false;
+
+  const idx = getMixedActiveIndex();
+  const row = mixedBatch.rows[idx];
+  if (!row) return true;
+
+  if (isB) {
+    mixedBatch.context.worker = b;
+    row.worker = b;
+  } else if (isV) {
+    mixedBatch.context.variedad = v;
+    row.variedad = v;
+    loadVariedadName(v);
+  } else if (isG) {
+    mixedBatch.context.grado = g;
+    row.grado = g;
+  } else if (isL) {
+    mixedBatch.context.lamina = l;
+    row.lamina = l;
+    await loadLaminaName(l);
+  }
+
+  if (isMixedRowComplete(row)) {
+    const next = mixedBatch.rows.findIndex((it, i) => i > idx && !isMixedRowComplete(it));
+    if (next >= 0) {
+      mixedBatch.activeIndex = next;
+      mixedBatch.rows[next] = createMixedRowFromContext();
+    }
+  }
+
+  renderMixedBatch();
+  lastScanEl.textContent = `Lote mixto: fila #${idx + 1} actualizada`;
+  return true;
+}
+
+async function submitMixedBatch() {
+  if (!mixedBatch || sendingMixedBatch) return;
+
+  const incomplete = mixedBatch.rows.findIndex((row) => !isMixedRowComplete(row));
+  if (incomplete >= 0) {
+    mixedBatch.activeIndex = incomplete;
+    lastScanEl.textContent = `Lote mixto: falta completar fila #${incomplete + 1}`;
+    renderMixedBatch();
+    return;
+  }
+
+  sendingMixedBatch = true;
+  if (btnMixedSend) btnMixedSend.disabled = true;
+
+  const rows = mixedBatch.rows.slice();
+  hideMixedBatch();
+
+  const grouped = new Map();
+  for (const row of rows) {
+    const key = `${row.worker.raw}|${row.variedad.raw}|${row.grado.raw}|${row.lamina.raw}`;
+    grouped.set(key, (grouped.get(key) || 0) + 1);
+  }
+
+  let total = 0;
+  for (const [key, cantidad] of grouped.entries()) {
+    const [worker, variedad, grado, lamina] = key.split("|");
+    const payload = {
+      worker,
+      variedad,
+      grado,
+      lamina,
+      cantidad_ramos: cantidad,
+      scan_batch_id: (window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`)
+    };
+    await sendT6ComboPayload(payload, key.replaceAll("|", " / "));
+    total += cantidad;
+  }
+
+  lastScanEl.textContent = `Lote mixto enviado: ${total} ramo(s)`;
+  renderAll();
+  focusScanInput();
+}
+
   async function trySendCombo() {
-  if (pendingT6Combo || pendingVarietySplit || pendingT6Detail) return;
+  if (pendingT6Combo || pendingVarietySplit || pendingT6Detail || mixedBatch) return;
 
   if (Number(pendingWorker?.tallos) === 10 && pendingWorker && pendingV && pendingL && !pendingG && isBlackLamina(pendingL)) {
     const blackCombo = {
@@ -2720,6 +2944,11 @@ async function syncOfflineScans() {
     return;
   }
 
+  if (mixedBatch) {
+    await handleMixedBatchScan({ isB, isV, isG, isL, b, v, g, l });
+    return;
+  }
+
   if (pendingT6Detail && !isB) {
     await handleT6DetailScan({ isV, isG, v, g });
     return;
@@ -2870,6 +3099,20 @@ document.addEventListener("keydown", async (e) => {
   btnT6DetailCancel?.addEventListener("click", () => {
     hideT6DetailPrompt();
     limpiarEscaneoPendiente("Modo T6 cancelado");
+    focusScanInput();
+  });
+  btnMixedMode?.addEventListener("click", () => {
+    hideT6DetailPrompt();
+    hideT6RamosPrompt();
+    hideVarietySplitPrompt();
+    showMixedBatch();
+    focusScanInput();
+  });
+  btnMixedSend?.addEventListener("click", submitMixedBatch);
+  btnMixedAdd?.addEventListener("click", addMixedRow);
+  btnMixedCancel?.addEventListener("click", () => {
+    hideMixedBatch();
+    limpiarEscaneoPendiente("Lote mixto cancelado");
     focusScanInput();
   });
 
