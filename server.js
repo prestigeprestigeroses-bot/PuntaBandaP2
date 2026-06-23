@@ -233,6 +233,21 @@ function parseLamina(code) {
   };
 }
 
+function parseCombinedScan(code) {
+  const up = String(code || "").trim().toUpperCase();
+  const m = up.match(/^(B\d{1,2})-T(\d{1,3})-G?(\d{1,3}|NACIONAL|BAJAS|PENDIENTE)-(L\d{1,3})-(V\d{1,2})$/);
+  if (!m) return null;
+
+  const wObj = parseWorker(`${m[1]}-T${m[2]}`);
+  const gObj = parseGrado(m[3]);
+  const lObj = parseLamina(m[4]);
+  const vObj = parseVariedad(m[5]);
+
+  if (!(wObj && gObj && lObj && vObj)) return null;
+
+  return { wObj, vObj, gObj, lObj };
+}
+
 /* ==========================================================
    VALIDACIONES DE CATÁLOGOS
    ========================================================== */
@@ -441,11 +456,13 @@ async function saveScan(wObj, vObj, gObj, lObj, variedadNombre, laminaNombre, ca
 app.post("/api/scan", async (req, res) => {
   try {
     const { worker, variedad, grado, lamina } = req.body || {};
+    const combinedCode = req.body?.codigo || req.body?.code || req.body?.scan || req.body?.barcode;
+    const combined = parseCombinedScan(combinedCode);
 
-    const wObj = parseWorker(worker);
-    const vObj = parseVariedad(variedad);
-    const gObj = parseGrado(grado);
-    const lObj = parseLamina(lamina);
+    const wObj = combined?.wObj || parseWorker(worker);
+    const vObj = combined?.vObj || parseVariedad(variedad);
+    const gObj = combined?.gObj || parseGrado(grado);
+    const lObj = combined?.lObj || parseLamina(lamina);
 
     if (!wObj) {
       return res.status(400).json({

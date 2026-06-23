@@ -1956,6 +1956,33 @@ function parseG(code) {
     return { raw: up, id: "L" + n };
   }
 
+  function parseCombinedScan(code) {
+    const up = String(code || "").trim().toUpperCase();
+    const m = up.match(/^(B\d{1,2})-T(\d{1,3})-G?(\d{1,3}|NACIONAL|BAJAS|PENDIENTE)-(L\d{1,3})-(V\d{1,2})$/);
+    if (!m) return null;
+
+    const worker = parseBonchador(`${m[1]}-T${m[2]}`);
+    const grado = parseG(m[3]);
+    const lamina = parseL(m[4]);
+    const variedad = parseV(m[5]);
+
+    if (!(worker && grado && lamina && variedad)) return null;
+
+    return {
+      raw: up,
+      worker,
+      grado,
+      lamina,
+      variedad,
+      payload: {
+        worker: worker.raw,
+        grado: grado.raw,
+        lamina: lamina.raw,
+        variedad: variedad.raw
+      }
+    };
+  }
+
   function detectBarcodeType(code) {
   const up = String(code || "").trim().toUpperCase();
   const b = parseBonchador(up);
@@ -2933,6 +2960,30 @@ async function syncOfflineScans() {
   // Código especial para cancelar el registro en construcción
   if (up === "E123") {
     limpiarEscaneoPendiente("E123 → REGISTRO EN CONSTRUCCIÓN BORRADO");
+    return;
+  }
+
+  const combined = parseCombinedScan(up);
+  if (combined) {
+    const comboText = `${combined.payload.worker} / ${combined.payload.variedad} / ${combined.payload.grado} / ${combined.payload.lamina}`;
+    lastScanEl.textContent = `${comboText} (enviando...)`;
+
+    const out = await sendToServer(combined.payload);
+    if (!out.ok) {
+      lastScanEl.textContent = `${comboText} (${out.data?.error || "ERROR"})`;
+      return;
+    }
+
+    if (out.data?.reg) {
+      addReturnedScans(out.data);
+      rememberCatalogNames(out.data?.regs || [out.data.reg]);
+      renderAll();
+    } else {
+      await refreshAll();
+    }
+
+    lastScanEl.textContent = `${comboText} (registrado)`;
+    if (typeof playOkSound === "function") playOkSound();
     return;
   }
 
