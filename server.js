@@ -319,6 +319,23 @@ app.get("/api/variedades/:id", async (req, res) => {
   }
 });
 
+app.get("/api/laminas", async (req, res) => {
+  try {
+    const result = await pool.query(
+      `
+      SELECT id, nombre, activo
+      FROM lamina
+      ORDER BY id ASC
+      `
+    );
+
+    res.json(result.rows);
+  } catch (err) {
+    console.error("GET /api/laminas error:", err);
+    res.status(500).json({ error: "Error en DB" });
+  }
+});
+
 app.get("/api/laminas/:id", async (req, res) => {
   try {
     const lObj = parseLamina(req.params.id);

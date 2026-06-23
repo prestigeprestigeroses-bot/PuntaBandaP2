@@ -75,6 +75,11 @@
     .mixed-actions{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
     .mixed-actions button{font-size:13px;font-weight:900;padding:10px}
     .mixed-actions button:first-child{background:#16a34a;border-color:#bbf7d0;color:white}
+    .label-gen-box{margin-top:14px;border:1px solid rgba(56,189,248,.4);border-radius:12px;padding:12px;background:rgba(8,47,73,.32)}
+    .label-gen-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+    .label-code{margin-top:10px;padding:10px;border:1px solid rgba(34,197,94,.45);border-radius:10px;background:rgba(20,83,45,.28);font-size:15px;font-weight:900;text-align:center}
+    .label-zpl{min-height:110px;font-size:11px;white-space:pre-wrap}
+    .label-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
     .okTxt{color:rgba(34,197,94,.95)}
     .warnTxt{color:rgba(255, 0, 0, 0.95)}
     /* =========================
@@ -610,6 +615,45 @@ Código 4 (lámina): <span class="mono">L1</span><br><br>
       <div id="namesBox" style="display:grid;grid-template-columns:1fr;gap:8px;"></div>
       <button id="btnSaveNames" class="ghost" type="button" style="margin-top:8px;">Guardar nombres</button>
 
+      <div class="label-gen-box">
+        <div class="pill">Generador de etiquetas Zebra</div>
+        <div class="label-gen-grid">
+          <label>Bonchador
+            <select id="labelWorker"></select>
+          </label>
+          <label>Tallos
+            <select id="labelTallos">
+              <option value="6">6</option>
+              <option value="10">10</option>
+              <option value="12">12</option>
+              <option value="20">20</option>
+              <option value="25">25</option>
+            </select>
+          </label>
+          <label>Grado
+            <select id="labelGrado">
+              <option value="40">40</option>
+              <option value="50">50</option>
+              <option value="60">60</option>
+              <option value="NACIONAL">NACIONAL</option>
+              <option value="BAJAS">BAJAS</option>
+            </select>
+          </label>
+          <label>Lamina
+            <select id="labelLamina"></select>
+          </label>
+          <label style="grid-column:1 / -1;">Variedad
+            <select id="labelVariedad"></select>
+          </label>
+        </div>
+        <div id="labelCode" class="label-code mono">-</div>
+        <textarea id="labelZpl" class="label-zpl mono" readonly></textarea>
+        <div class="label-actions">
+          <button id="btnCopyZpl" class="ghost" type="button">Copiar ZPL</button>
+          <button id="btnDownloadZpl" class="ghost" type="button">Descargar ZPL</button>
+        </div>
+      </div>
+
       <label style="margin-top:12px;">Pendientes por bonchador</label>
       <div class="hint mono" id="pendingBox"
            style="padding:10px;border:1px solid var(--line);border-radius:12px;background:rgba(10,18,32,.25);white-space:pre-wrap">—</div>
@@ -690,6 +734,15 @@ const btnMixedMode = $("btnMixedMode");
 const btnMixedSend = $("btnMixedSend");
 const btnMixedAdd = $("btnMixedAdd");
 const btnMixedCancel = $("btnMixedCancel");
+const labelWorker = $("labelWorker");
+const labelTallos = $("labelTallos");
+const labelGrado = $("labelGrado");
+const labelLamina = $("labelLamina");
+const labelVariedad = $("labelVariedad");
+const labelCode = $("labelCode");
+const labelZpl = $("labelZpl");
+const btnCopyZpl = $("btnCopyZpl");
+const btnDownloadZpl = $("btnDownloadZpl");
 
   const lastWorkerEl = $("lastWorkerForV");
   const lastVEl = $("lastVPending");
@@ -706,6 +759,7 @@ const lastLEl = $("lastLPending");
   let variedadNameMap = {};
   let variedadCatalog = [];
   let laminaNameMap = {};
+  let laminaCatalog = [];
   let scans = [];
   let pendingAll = {};
   let es = null;
@@ -1815,6 +1869,7 @@ function rememberCatalogNames(rows = scans) {
 
     renderNamesEditorOnce();
     renderWorkerFilter();
+    renderLabelWorkerOptions();
 
     return;
   }
@@ -1834,6 +1889,93 @@ function rememberCatalogNames(rows = scans) {
 
   renderNamesEditorOnce();
   renderWorkerFilter();
+  renderLabelWorkerOptions();
+}
+
+function renderLabelWorkerOptions() {
+  if (!labelWorker) return;
+
+  labelWorker.innerHTML = workers.map((w) => {
+    const name = workerNameMap[w] && workerNameMap[w] !== w ? ` - ${workerNameMap[w]}` : "";
+    return `<option value="${escapeHtml(w)}">${escapeHtml(w + name)}</option>`;
+  }).join("");
+
+  updateLabelGenerator();
+}
+
+async function initLabelGenerator() {
+  await Promise.all([loadVariedadesCatalog(), loadLaminasCatalog()]);
+
+  if (labelVariedad) labelVariedad.innerHTML = renderVarietyOptions();
+  if (labelLamina) labelLamina.innerHTML = renderLaminaOptions();
+  renderLabelWorkerOptions();
+  updateLabelGenerator();
+}
+
+function buildLabelCode() {
+  const worker = labelWorker?.value || "";
+  const tallos = labelTallos?.value || "";
+  const grado = labelGrado?.value || "";
+  const lamina = labelLamina?.value || "";
+  const variedad = labelVariedad?.value || "";
+
+  if (!(worker && tallos && grado && lamina && variedad)) return "";
+  return `${worker}-T${tallos}-${grado}-${lamina}-${variedad}`;
+}
+
+function buildZpl(code) {
+  if (!code) return "";
+
+  const [workerPart, tallosPart, gradoPart, laminaPart, variedadPart] = code.split("-");
+  const varietyName = variedadNameMap[variedadPart] || variedadPart;
+  const laminaName = laminaNameMap[laminaPart] || laminaPart;
+  const line = `${workerPart} ${tallosPart} G${gradoPart.replace(/^G/, "")} ${laminaPart} ${variedadPart}`;
+
+  return `^XA
+^PW600
+^LL320
+^FO32,24^A0N,28,28^FD${line}^FS
+^FO32,60^A0N,24,24^FD${varietyName} / ${laminaName}^FS
+^FO32,96^BY2,2,90
+^BCN,90,Y,N,N
+^FD${code}^FS
+^XZ`;
+}
+
+function updateLabelGenerator() {
+  const code = buildLabelCode();
+  if (labelCode) labelCode.textContent = code || "Seleccione todos los campos";
+  if (labelZpl) labelZpl.value = buildZpl(code);
+}
+
+async function copyLabelZpl() {
+  const text = labelZpl?.value || "";
+  if (!text) return;
+
+  try {
+    await navigator.clipboard.writeText(text);
+    lastScanEl.textContent = "ZPL copiado";
+  } catch {
+    labelZpl?.select();
+    lastScanEl.textContent = "Seleccione y copie el ZPL manualmente";
+  }
+}
+
+function downloadLabelZpl() {
+  const text = labelZpl?.value || "";
+  const code = buildLabelCode();
+  if (!text || !code) return;
+
+  const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `${code}.zpl`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+  lastScanEl.textContent = "ZPL descargado";
 }
 
   async function refreshAll() {
@@ -1878,6 +2020,40 @@ function renderVarietyOptions(selected = "") {
   for (const v of variedadCatalog) {
     const label = v.nombre ? `${v.id} - ${v.nombre}` : v.id;
     options.push(`<option value="${escapeHtml(v.id)}"${v.id === current ? " selected" : ""}>${escapeHtml(label)}</option>`);
+  }
+
+  return options.join("");
+}
+
+async function loadLaminasCatalog() {
+  if (laminaCatalog.length) return laminaCatalog;
+
+  const res = await fetch(API + "/api/laminas", { cache: "no-store" }).catch(() => null);
+  if (!res || !res.ok) return laminaCatalog;
+
+  const arr = await res.json().catch(() => []);
+  laminaCatalog = Array.isArray(arr)
+    ? arr.map((l) => ({
+        id: String(l.id || "").trim().toUpperCase(),
+        nombre: String(l.nombre || "").trim(),
+        activo: l.activo
+      })).filter((l) => l.id && l.activo !== false)
+    : [];
+
+  for (const l of laminaCatalog) {
+    if (l.nombre) laminaNameMap[l.id] = l.nombre;
+  }
+
+  return laminaCatalog;
+}
+
+function renderLaminaOptions(selected = "") {
+  const current = String(selected || "").trim().toUpperCase();
+  const options = [`<option value="">Seleccione lamina</option>`];
+
+  for (const l of laminaCatalog) {
+    const label = l.nombre ? `${l.id} - ${l.nombre}` : l.id;
+    options.push(`<option value="${escapeHtml(l.id)}"${l.id === current ? " selected" : ""}>${escapeHtml(label)}</option>`);
   }
 
   return options.join("");
@@ -3166,6 +3342,11 @@ document.addEventListener("keydown", async (e) => {
     limpiarEscaneoPendiente("Lote mixto cancelado");
     focusScanInput();
   });
+  [labelWorker, labelTallos, labelGrado, labelLamina, labelVariedad].forEach((el) => {
+    el?.addEventListener("change", updateLabelGenerator);
+  });
+  btnCopyZpl?.addEventListener("click", copyLabelZpl);
+  btnDownloadZpl?.addEventListener("click", downloadLabelZpl);
 
   let pollTimer = null;
 
@@ -3490,6 +3671,7 @@ window.addEventListener("pageshow", activarEscaneoInicial);
 
   try {
       await loadWorkers();
+      await initLabelGenerator();
       pillApi.textContent = "API: OK";
       setStatus(true, "Conectado", "API");
       await refreshAll();
