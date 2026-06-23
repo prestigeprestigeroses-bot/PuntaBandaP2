@@ -647,10 +647,9 @@ Código 4 (lámina): <span class="mono">L1</span><br><br>
           </label>
         </div>
         <div id="labelCode" class="label-code mono">-</div>
-        <textarea id="labelZpl" class="label-zpl mono" readonly></textarea>
         <div class="label-actions">
-          <button id="btnCopyZpl" class="ghost" type="button">Copiar ZPL</button>
-          <button id="btnDownloadZpl" class="ghost" type="button">Descargar ZPL</button>
+          <button id="btnCopyLabelCode" class="ghost" type="button">Copiar codigo</button>
+          <button id="btnDownloadLabelCode" class="ghost" type="button">Descargar TXT</button>
         </div>
       </div>
 
@@ -740,9 +739,8 @@ const labelGrado = $("labelGrado");
 const labelLamina = $("labelLamina");
 const labelVariedad = $("labelVariedad");
 const labelCode = $("labelCode");
-const labelZpl = $("labelZpl");
-const btnCopyZpl = $("btnCopyZpl");
-const btnDownloadZpl = $("btnDownloadZpl");
+const btnCopyLabelCode = $("btnCopyLabelCode");
+const btnDownloadLabelCode = $("btnDownloadLabelCode");
 
   const lastWorkerEl = $("lastWorkerForV");
   const lastVEl = $("lastVPending");
@@ -1923,59 +1921,37 @@ function buildLabelCode() {
   return `${worker}-T${tallos}-${grado}-${lamina}-${variedad}`;
 }
 
-function buildZpl(code) {
-  if (!code) return "";
-
-  const [workerPart, tallosPart, gradoPart, laminaPart, variedadPart] = code.split("-");
-  const varietyName = variedadNameMap[variedadPart] || variedadPart;
-  const laminaName = laminaNameMap[laminaPart] || laminaPart;
-  const line = `${workerPart} ${tallosPart} G${gradoPart.replace(/^G/, "")} ${laminaPart} ${variedadPart}`;
-
-  return `^XA
-^PW600
-^LL320
-^FO32,24^A0N,28,28^FD${line}^FS
-^FO32,60^A0N,24,24^FD${varietyName} / ${laminaName}^FS
-^FO32,96^BY2,2,90
-^BCN,90,Y,N,N
-^FD${code}^FS
-^XZ`;
-}
-
 function updateLabelGenerator() {
   const code = buildLabelCode();
   if (labelCode) labelCode.textContent = code || "Seleccione todos los campos";
-  if (labelZpl) labelZpl.value = buildZpl(code);
 }
 
-async function copyLabelZpl() {
-  const text = labelZpl?.value || "";
-  if (!text) return;
+async function copyLabelCode() {
+  const code = buildLabelCode();
+  if (!code) return;
 
   try {
-    await navigator.clipboard.writeText(text);
-    lastScanEl.textContent = "ZPL copiado";
+    await navigator.clipboard.writeText(code);
+    lastScanEl.textContent = "Codigo copiado";
   } catch {
-    labelZpl?.select();
-    lastScanEl.textContent = "Seleccione y copie el ZPL manualmente";
+    lastScanEl.textContent = "No se pudo copiar el codigo";
   }
 }
 
-function downloadLabelZpl() {
-  const text = labelZpl?.value || "";
+function downloadLabelCode() {
   const code = buildLabelCode();
-  if (!text || !code) return;
+  if (!code) return;
 
-  const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+  const blob = new Blob([code], { type: "text/plain;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `${code}.zpl`;
+  a.download = `${code}.txt`;
   document.body.appendChild(a);
   a.click();
   a.remove();
   URL.revokeObjectURL(url);
-  lastScanEl.textContent = "ZPL descargado";
+  lastScanEl.textContent = "Codigo descargado";
 }
 
   async function refreshAll() {
@@ -3345,8 +3321,8 @@ document.addEventListener("keydown", async (e) => {
   [labelWorker, labelTallos, labelGrado, labelLamina, labelVariedad].forEach((el) => {
     el?.addEventListener("change", updateLabelGenerator);
   });
-  btnCopyZpl?.addEventListener("click", copyLabelZpl);
-  btnDownloadZpl?.addEventListener("click", downloadLabelZpl);
+  btnCopyLabelCode?.addEventListener("click", copyLabelCode);
+  btnDownloadLabelCode?.addEventListener("click", downloadLabelCode);
 
   let pollTimer = null;
 
