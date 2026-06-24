@@ -79,7 +79,8 @@
     .label-gen-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
     .label-code{margin-top:10px;padding:10px;border:1px solid rgba(34,197,94,.45);border-radius:10px;background:rgba(20,83,45,.28);font-size:15px;font-weight:900;text-align:center}
     .label-zpl{min-height:110px;font-size:11px;white-space:pre-wrap}
-    .label-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
+    .label-actions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:8px}
+    @media(max-width:640px){.label-actions{grid-template-columns:1fr}}
     .okTxt{color:rgba(34,197,94,.95)}
     .warnTxt{color:rgba(255, 0, 0, 0.95)}
     /* =========================
@@ -650,6 +651,7 @@ Código 4 (lámina): <span class="mono">L1</span><br><br>
         <div class="label-actions">
           <button id="btnCopyLabelCode" class="ghost" type="button">Copiar codigo</button>
           <button id="btnDownloadLabelCode" class="ghost" type="button">Descargar TXT</button>
+          <button id="btnPrintZebra" class="ghost" type="button">Imprimir Zebra</button>
         </div>
       </div>
 
@@ -741,6 +743,7 @@ const labelVariedad = $("labelVariedad");
 const labelCode = $("labelCode");
 const btnCopyLabelCode = $("btnCopyLabelCode");
 const btnDownloadLabelCode = $("btnDownloadLabelCode");
+const btnPrintZebra = $("btnPrintZebra");
 
   const lastWorkerEl = $("lastWorkerForV");
   const lastVEl = $("lastVPending");
@@ -1952,6 +1955,18 @@ function downloadLabelCode() {
   a.remove();
   URL.revokeObjectURL(url);
   lastScanEl.textContent = "Codigo descargado";
+}
+
+function printLabelInZebra() {
+  const code = buildLabelCode();
+  if (!code) {
+    lastScanEl.textContent = "Seleccione todos los campos para imprimir";
+    return;
+  }
+
+  const url = `puntazebra://print?code=${encodeURIComponent(code)}&quantity=1`;
+  lastScanEl.textContent = "Abriendo impresor Zebra local...";
+  window.location.href = url;
 }
 
   async function refreshAll() {
@@ -3323,6 +3338,7 @@ document.addEventListener("keydown", async (e) => {
   });
   btnCopyLabelCode?.addEventListener("click", copyLabelCode);
   btnDownloadLabelCode?.addEventListener("click", downloadLabelCode);
+  btnPrintZebra?.addEventListener("click", printLabelInZebra);
 
   let pollTimer = null;
 
