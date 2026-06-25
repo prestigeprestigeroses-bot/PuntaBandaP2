@@ -1956,6 +1956,12 @@ function getLabelProfileName(profile) {
   return profile === "70x25 Barcode" ? "etiqueta larga 70x25" : "etiqueta cuadrada 50x40";
 }
 
+function getSelectedOptionName(selectEl) {
+  const text = selectEl?.selectedOptions?.[0]?.textContent || "";
+  const parts = text.split(" - ");
+  return (parts.length > 1 ? parts.slice(1).join(" - ") : text).trim();
+}
+
 async function copyLabelCode() {
   const code = buildLabelCode();
   if (!code) return;
@@ -1993,7 +1999,8 @@ function printLabelInZebra() {
 
   const profile = getLabelProfile();
   const quantity = getLabelQuantity();
-  const url = `puntazebra://print?code=${encodeURIComponent(code)}&quantity=${encodeURIComponent(String(quantity))}&profile=${encodeURIComponent(profile)}`;
+  const varietyName = getSelectedOptionName(labelVariedad);
+  const url = `puntazebra://print?code=${encodeURIComponent(code)}&quantity=${encodeURIComponent(String(quantity))}&profile=${encodeURIComponent(profile)}&varietyName=${encodeURIComponent(varietyName)}`;
   lastScanEl.textContent = `Abriendo impresor Zebra local: ${getLabelProfileName(profile)} x ${quantity}`;
   window.location.href = url;
 }
