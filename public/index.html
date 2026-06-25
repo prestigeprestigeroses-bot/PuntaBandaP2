@@ -636,8 +636,10 @@ Código 4 (lámina): <span class="mono">L1</span><br><br>
               <option value="40">40</option>
               <option value="50">50</option>
               <option value="60">60</option>
-              <option value="NACIONAL">NACIONAL</option>
-              <option value="BAJAS">BAJAS</option>
+              <option value="70">70</option>
+              <option value="80">80</option>
+              <option value="90">90</option>
+              <option value="100">100</option>
             </select>
           </label>
           <label>Lamina
@@ -651,7 +653,7 @@ Código 4 (lámina): <span class="mono">L1</span><br><br>
         <div class="label-actions">
           <button id="btnCopyLabelCode" class="ghost" type="button">Copiar codigo</button>
           <button id="btnDownloadLabelCode" class="ghost" type="button">Descargar TXT</button>
-          <button id="btnPrintZebra" class="ghost" type="button">Imprimir Zebra</button>
+          <button id="btnPrintZebra" class="ghost" type="button">Imprimir QR 50x40</button>
         </div>
       </div>
 
@@ -1964,8 +1966,9 @@ function printLabelInZebra() {
     return;
   }
 
-  const url = `puntazebra://print?code=${encodeURIComponent(code)}&quantity=1`;
-  lastScanEl.textContent = "Abriendo impresor Zebra local...";
+  const profile = "50x40 QR";
+  const url = `puntazebra://print?code=${encodeURIComponent(code)}&quantity=1&profile=${encodeURIComponent(profile)}`;
+  lastScanEl.textContent = "Abriendo impresor Zebra local en QR 50x40...";
   window.location.href = url;
 }
 
