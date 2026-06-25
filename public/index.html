@@ -648,12 +648,21 @@ Código 4 (lámina): <span class="mono">L1</span><br><br>
           <label style="grid-column:1 / -1;">Variedad
             <select id="labelVariedad"></select>
           </label>
+          <label>Tipo de etiqueta
+            <select id="labelProfile">
+              <option value="50x40 QR">Etiqueta cuadrada 50x40 QR</option>
+              <option value="70x25 Barcode">Etiqueta larga 70x25 Barcode</option>
+            </select>
+          </label>
+          <label>Cantidad
+            <input id="labelQuantity" type="number" min="1" max="999" value="1" />
+          </label>
         </div>
         <div id="labelCode" class="label-code mono">-</div>
         <div class="label-actions">
           <button id="btnCopyLabelCode" class="ghost" type="button">Copiar codigo</button>
           <button id="btnDownloadLabelCode" class="ghost" type="button">Descargar TXT</button>
-          <button id="btnPrintZebra" class="ghost" type="button">Imprimir QR 50x40</button>
+          <button id="btnPrintZebra" class="ghost" type="button">Imprimir Zebra</button>
         </div>
       </div>
 
@@ -742,6 +751,8 @@ const labelTallos = $("labelTallos");
 const labelGrado = $("labelGrado");
 const labelLamina = $("labelLamina");
 const labelVariedad = $("labelVariedad");
+const labelProfile = $("labelProfile");
+const labelQuantity = $("labelQuantity");
 const labelCode = $("labelCode");
 const btnCopyLabelCode = $("btnCopyLabelCode");
 const btnDownloadLabelCode = $("btnDownloadLabelCode");
@@ -1931,6 +1942,20 @@ function updateLabelGenerator() {
   if (labelCode) labelCode.textContent = code || "Seleccione todos los campos";
 }
 
+function getLabelQuantity() {
+  const quantity = parseInt(labelQuantity?.value || "1", 10);
+  if (!Number.isFinite(quantity) || quantity < 1) return 1;
+  return Math.min(quantity, 999);
+}
+
+function getLabelProfile() {
+  return labelProfile?.value || "50x40 QR";
+}
+
+function getLabelProfileName(profile) {
+  return profile === "70x25 Barcode" ? "etiqueta larga 70x25" : "etiqueta cuadrada 50x40";
+}
+
 async function copyLabelCode() {
   const code = buildLabelCode();
   if (!code) return;
@@ -1966,9 +1991,10 @@ function printLabelInZebra() {
     return;
   }
 
-  const profile = "50x40 QR";
-  const url = `puntazebra://print?code=${encodeURIComponent(code)}&quantity=1&profile=${encodeURIComponent(profile)}`;
-  lastScanEl.textContent = "Abriendo impresor Zebra local en QR 50x40...";
+  const profile = getLabelProfile();
+  const quantity = getLabelQuantity();
+  const url = `puntazebra://print?code=${encodeURIComponent(code)}&quantity=${encodeURIComponent(String(quantity))}&profile=${encodeURIComponent(profile)}`;
+  lastScanEl.textContent = `Abriendo impresor Zebra local: ${getLabelProfileName(profile)} x ${quantity}`;
   window.location.href = url;
 }
 
@@ -3336,9 +3362,10 @@ document.addEventListener("keydown", async (e) => {
     limpiarEscaneoPendiente("Lote mixto cancelado");
     focusScanInput();
   });
-  [labelWorker, labelTallos, labelGrado, labelLamina, labelVariedad].forEach((el) => {
+  [labelWorker, labelTallos, labelGrado, labelLamina, labelVariedad, labelProfile, labelQuantity].forEach((el) => {
     el?.addEventListener("change", updateLabelGenerator);
   });
+  labelQuantity?.addEventListener("input", updateLabelGenerator);
   btnCopyLabelCode?.addEventListener("click", copyLabelCode);
   btnDownloadLabelCode?.addEventListener("click", downloadLabelCode);
   btnPrintZebra?.addEventListener("click", printLabelInZebra);
