@@ -75,8 +75,6 @@
     .mixed-actions{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
     .mixed-actions button{font-size:13px;font-weight:900;padding:10px}
     .mixed-actions button:first-child{background:#16a34a;border-color:#bbf7d0;color:white}
-    .label-gen-box{margin-top:14px;border:1px solid rgba(56,189,248,.4);border-radius:12px;padding:12px;background:rgba(8,47,73,.32)}
-    .label-gen-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
     .label-code{margin-top:10px;padding:10px;border:1px solid rgba(34,197,94,.45);border-radius:10px;background:rgba(20,83,45,.28);font-size:15px;font-weight:900;text-align:center}
     .label-zpl{min-height:110px;font-size:11px;white-space:pre-wrap}
     .label-actions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:8px}
@@ -616,46 +614,6 @@ Código 4 (lámina): <span class="mono">L1</span><br><br>
       <div id="namesBox" style="display:grid;grid-template-columns:1fr;gap:8px;"></div>
       <button id="btnSaveNames" class="ghost" type="button" style="margin-top:8px;">Guardar nombres</button>
 
-      <div class="label-gen-box">
-        <div class="pill">Generador de etiquetas Zebra</div>
-        <div class="label-gen-grid">
-          <label>Bonchador
-            <select id="labelWorker"></select>
-          </label>
-          <label>Tallos
-            <select id="labelTallos">
-              <option value="6">6</option>
-              <option value="10">10</option>
-              <option value="12">12</option>
-              <option value="20">20</option>
-              <option value="25">25</option>
-            </select>
-          </label>
-          <label>Grado
-            <select id="labelGrado">
-              <option value="40">40</option>
-              <option value="50">50</option>
-              <option value="60">60</option>
-              <option value="70">70</option>
-              <option value="80">80</option>
-              <option value="90">90</option>
-              <option value="100">100</option>
-            </select>
-          </label>
-          <label>Lamina
-            <select id="labelLamina"></select>
-          </label>
-          <label style="grid-column:1 / -1;">Variedad
-            <select id="labelVariedad"></select>
-          </label>
-        </div>
-        <div id="labelCode" class="label-code mono">-</div>
-        <div class="label-actions">
-          <button id="btnCopyLabelCode" class="ghost" type="button">Copiar codigo</button>
-          <button id="btnDownloadLabelCode" class="ghost" type="button">Descargar TXT</button>
-        </div>
-      </div>
-
       <label style="margin-top:12px;">Pendientes por bonchador</label>
       <div class="hint mono" id="pendingBox"
            style="padding:10px;border:1px solid var(--line);border-radius:12px;background:rgba(10,18,32,.25);white-space:pre-wrap">—</div>
@@ -736,15 +694,6 @@ const btnMixedMode = $("btnMixedMode");
 const btnMixedSend = $("btnMixedSend");
 const btnMixedAdd = $("btnMixedAdd");
 const btnMixedCancel = $("btnMixedCancel");
-const labelWorker = $("labelWorker");
-const labelTallos = $("labelTallos");
-const labelGrado = $("labelGrado");
-const labelLamina = $("labelLamina");
-const labelVariedad = $("labelVariedad");
-const labelCode = $("labelCode");
-const btnCopyLabelCode = $("btnCopyLabelCode");
-const btnDownloadLabelCode = $("btnDownloadLabelCode");
-
   const lastWorkerEl = $("lastWorkerForV");
   const lastVEl = $("lastVPending");
 const lastGEl = $("lastGPending");
@@ -1870,8 +1819,6 @@ function rememberCatalogNames(rows = scans) {
 
     renderNamesEditorOnce();
     renderWorkerFilter();
-    renderLabelWorkerOptions();
-
     return;
   }
 
@@ -1890,77 +1837,6 @@ function rememberCatalogNames(rows = scans) {
 
   renderNamesEditorOnce();
   renderWorkerFilter();
-  renderLabelWorkerOptions();
-}
-
-function renderLabelWorkerOptions() {
-  if (!labelWorker) return;
-
-  labelWorker.innerHTML = workers.map((w) => {
-    const name = workerNameMap[w] && workerNameMap[w] !== w ? ` - ${workerNameMap[w]}` : "";
-    return `<option value="${escapeHtml(w)}">${escapeHtml(w + name)}</option>`;
-  }).join("");
-
-  updateLabelGenerator();
-}
-
-async function initLabelGenerator() {
-  await Promise.all([loadVariedadesCatalog(), loadLaminasCatalog()]);
-
-  if (labelVariedad) labelVariedad.innerHTML = renderVarietyOptions();
-  if (labelLamina) labelLamina.innerHTML = renderLaminaOptions();
-  renderLabelWorkerOptions();
-  updateLabelGenerator();
-}
-
-function buildLabelCode() {
-  const worker = labelWorker?.value || "";
-  const tallos = labelTallos?.value || "";
-  const grado = labelGrado?.value || "";
-  const lamina = labelLamina?.value || "";
-  const variedad = labelVariedad?.value || "";
-
-  if (!(worker && tallos && grado && lamina && variedad)) return "";
-  return `${worker}-T${tallos}-${grado}-${lamina}-${variedad}`;
-}
-
-function updateLabelGenerator() {
-  const code = buildLabelCode();
-  if (labelCode) labelCode.textContent = code || "Seleccione todos los campos";
-}
-
-function getSelectedOptionName(selectEl) {
-  const text = selectEl?.selectedOptions?.[0]?.textContent || "";
-  const parts = text.split(" - ");
-  return (parts.length > 1 ? parts.slice(1).join(" - ") : text).trim();
-}
-
-async function copyLabelCode() {
-  const code = buildLabelCode();
-  if (!code) return;
-
-  try {
-    await navigator.clipboard.writeText(code);
-    lastScanEl.textContent = "Codigo copiado";
-  } catch {
-    lastScanEl.textContent = "No se pudo copiar el codigo";
-  }
-}
-
-function downloadLabelCode() {
-  const code = buildLabelCode();
-  if (!code) return;
-
-  const blob = new Blob([code], { type: "text/plain;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `${code}.txt`;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
-  lastScanEl.textContent = "Codigo descargado";
 }
 
   async function refreshAll() {
@@ -3328,12 +3204,6 @@ document.addEventListener("keydown", async (e) => {
     limpiarEscaneoPendiente("Lote mixto cancelado");
     focusScanInput();
   });
-  [labelWorker, labelTallos, labelGrado, labelLamina, labelVariedad].forEach((el) => {
-    el?.addEventListener("change", updateLabelGenerator);
-  });
-  btnCopyLabelCode?.addEventListener("click", copyLabelCode);
-  btnDownloadLabelCode?.addEventListener("click", downloadLabelCode);
-
   let pollTimer = null;
 
   function startPollingFallback() {
@@ -3657,7 +3527,6 @@ window.addEventListener("pageshow", activarEscaneoInicial);
 
   try {
       await loadWorkers();
-      await initLabelGenerator();
       pillApi.textContent = "API: OK";
       setStatus(true, "Conectado", "API");
       await refreshAll();
