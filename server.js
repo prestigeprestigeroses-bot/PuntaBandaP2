@@ -235,7 +235,8 @@ function parseLamina(code) {
 
 function parseCombinedScan(code) {
   const up = String(code || "").trim().toUpperCase();
-  const m = up.match(/^(B\d{1,2})-T(\d{1,3})-G?(\d{1,3}|NACIONAL|BAJAS|PENDIENTE)-(L\d{1,3})-(V\d{1,2})$/);
+  // P1 y S26-6 identifican el punto, la semana y el dia; no hacen parte del registro.
+  const m = up.match(/^(B\d{1,2})-T(\d{1,3})-G?(\d{1,3}|NACIONAL|BAJAS|PENDIENTE)-(L\d{1,3})-(V\d{1,2})(?:-P\d{1,2})?(?:-S(?:[1-9]|[1-4]\d|5[0-3])-[1-7])?$/);
   if (!m) return null;
 
   const wObj = parseWorker(`${m[1]}-T${m[2]}`);
